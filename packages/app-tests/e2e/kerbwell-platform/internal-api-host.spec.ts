@@ -59,6 +59,17 @@ test.describe('kerbwell internal API host', () => {
     expect(Array.isArray(body.data)).toBe(true);
   });
 
+  test('an internal-host request that came through the edge returns 404', async ({ request }) => {
+    const token = await apiToken();
+
+    for (const header of ['cf-ray', 'cf-connecting-ip', 'cdn-loop']) {
+      const res = await request.get(`${INTERNAL_URL}/api/v2/envelope`, {
+        headers: { Authorization: `Bearer ${token}`, [header]: 'kerbwell-e2e' },
+      });
+      expect(res.status(), header).toBe(404);
+    }
+  });
+
   test('the health check and the signing pages stay public', async ({ request }) => {
     const health = await request.get(`${PUBLIC_URL}/api/health`);
     expect(health.status()).toBe(200);

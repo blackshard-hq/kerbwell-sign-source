@@ -9,8 +9,9 @@ name: 'Kerbwell source and platform'
 # tag that answers 200 anonymously (docker/kerbwell-source-gate.mjs), so no other build route
 # can ship an image without public source.
 #
-# The platform tests (internal API host lock, timestamped webhook signature, bootstrap
-# defaults) run on every pull request.
+# The platform tests run on every pull request: the timestamped webhook signature and host-lock
+# unit tests, then the built image itself (the bootstrap on a fresh database, and the
+# Playwright host-lock spec against the running app with the lock on).
 
 on:
   pull_request:
@@ -59,6 +60,94 @@ jobs:
           node --check docker/kerbwell-bootstrap.test.mjs
           bash -n docker/kerbwell-source.sh
           bash -n docker/kerbwell-bootstrap.test.sh
+
+  # The bootstrap and the API host lock against the built image: the bootstrap test on a fresh
+  # migrated Postgres, then the app with NEXT_PRIVATE_INTERNAL_API_HOSTS=127.0.0.1, set up by
+  # the bootstrap job as on ACA, and the Playwright host-lock spec run against it twice over
+  # (127.0.0.1 is the internal host, localhost is a public name for the same server).
+  image_tests:
+    name: Bootstrap and host lock against the image
+    runs-on: ubuntu-latest
+    steps:
+      # The image build and npm ci together do not fit the runner's free disk otherwise.
+      - name: Free runner disk
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h / | tail -1
+
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Build the image (compile target, no source URL)
+        run: |
+          docker buildx build --load --target unpublished -f docker/Dockerfile \
+            -t kerbwell-esign:ci . 2>build.log || { tail -60 build.log; exit 1; }
+
+      - name: Bootstrap on a fresh database
+        run: DOCKER=docker docker/kerbwell-bootstrap.test.sh kerbwell-esign:ci
+
+      - name: Start the app with the host lock on, then run the bootstrap job
+        run: |
+          rnd() { head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9'; }
+          export POSTGRES_PASSWORD="$(rnd)"
+          export NEXT_PRIVATE_DATABASE_URL="postgres://postgres:${POSTGRES_PASSWORD}@127.0.0.1:5432/postgres"
+          export NEXT_PRIVATE_DIRECT_DATABASE_URL="$NEXT_PRIVATE_DATABASE_URL"
+          export NEXTAUTH_SECRET="$(rnd)"
+          export NEXT_PRIVATE_ENCRYPTION_KEY="$(rnd)"
+          export NEXT_PRIVATE_ENCRYPTION_SECONDARY_KEY="$(rnd)"
+          export NEXT_PUBLIC_WEBAPP_URL='http://localhost:3000'
+          export NEXT_PUBLIC_UPLOAD_TRANSPORT='database'
+          export NEXT_PRIVATE_INTERNAL_API_HOSTS='127.0.0.1'
+          docker run -d --name kw-db -p 127.0.0.1:5432:5432 -e POSTGRES_PASSWORD postgres:16-alpine >/dev/null
+          for _ in $(seq 1 60); do docker exec kw-db pg_isready -U postgres -q 2>/dev/null && break; sleep 1; done
+          docker run -d --name kw-app --network host \
+            -e NEXT_PRIVATE_DATABASE_URL -e NEXT_PRIVATE_DIRECT_DATABASE_URL -e NEXTAUTH_SECRET \
+            -e NEXT_PRIVATE_ENCRYPTION_KEY -e NEXT_PRIVATE_ENCRYPTION_SECONDARY_KEY \
+            -e NEXT_PUBLIC_WEBAPP_URL -e NEXT_PUBLIC_UPLOAD_TRANSPORT -e NEXT_PRIVATE_INTERNAL_API_HOSTS \
+            kerbwell-esign:ci >/dev/null
+          for i in $(seq 1 120); do
+            [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/health)" = 200 ] && break
+            [ "$i" = 120 ] && { docker logs kw-app | tail -60; echo "::error::the app did not answer /api/health"; exit 1; }
+            sleep 2
+          done
+          token="api_$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+          echo "::add-mask::${token}"
+          export KERBWELL_ESIGN_TOKEN="$token"
+          export KERBWELL_ESIGN_ADMIN_EMAIL='esign-admin@blackshard.com.au'
+          export KERBWELL_ESIGN_ADMIN_PASSWORD="$(rnd)"
+          export KERBWELL_ESIGN_WEBHOOK_URL='https://kerbwell-staff.internal.ci.test/api/integrations/esign/webhook'
+          export KERBWELL_ESIGN_WEBHOOK_SECRET="$(rnd)"
+          docker run --rm --network host \
+            -e NEXT_PRIVATE_DATABASE_URL -e NEXT_PRIVATE_DIRECT_DATABASE_URL \
+            -e NEXT_PRIVATE_ENCRYPTION_KEY -e NEXT_PRIVATE_ENCRYPTION_SECONDARY_KEY -e NEXTAUTH_SECRET \
+            -e KERBWELL_ESIGN_TOKEN -e KERBWELL_ESIGN_ADMIN_EMAIL -e KERBWELL_ESIGN_ADMIN_PASSWORD \
+            -e KERBWELL_ESIGN_WEBHOOK_URL -e KERBWELL_ESIGN_WEBHOOK_SECRET \
+            --entrypoint node kerbwell-esign:ci kerbwell-bootstrap.mjs
+          echo "KERBWELL_E2E_API_TOKEN=${token}" >> "$GITHUB_ENV"
+          # The running container keeps its image; the build cache is not needed again.
+          docker buildx prune -af >/dev/null
+          df -h / | tail -1
+
+      - uses: ./.github/actions/node-install
+
+      - name: Playwright host-lock spec
+        working-directory: packages/app-tests
+        env:
+          KERBWELL_E2E_INTERNAL_URL: 'http://127.0.0.1:3000'
+          KERBWELL_E2E_PUBLIC_URL: 'http://localhost:3000'
+          NEXT_PUBLIC_WEBAPP_URL: 'http://localhost:3000'
+        run: |
+          NODE_OPTIONS='--import tsx' npx playwright test e2e/kerbwell-platform \
+            --project ui --retries 0 --reporter list | tee pw.log
+          grep -qE '[0-9]+ passed' pw.log
+          if grep -qE '[0-9]+ (skipped|failed)' pw.log; then echo "::error::a host-lock test was skipped or failed"; exit 1; fi
+
+      - name: App log on failure
+        if: failure()
+        run: docker logs kw-app 2>&1 | tail -80 || true
 
   source_check_negative:
     name: Source check refuses a private commit
@@ -122,7 +211,7 @@ jobs:
   publish_source:
     name: Publish source, then build the image
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    needs: [platform_tests, source_check_negative, source_gate_build]
+    needs: [platform_tests, image_tests, source_check_negative, source_gate_build]
     runs-on: ubuntu-latest
     outputs:
       source_url: ${{ steps.release.outputs.source_url }}

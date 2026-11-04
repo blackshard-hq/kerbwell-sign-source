@@ -86,6 +86,16 @@ Exit codes: 0 ready, 1 a step failed, 2 configuration missing or invalid.
 checks all of this and that a second run changes nothing. `docker/kerbwell-bootstrap.test.sh
 IMAGE` sets up the throwaway database and runs it.
 
+CI (`kerbwell-source.yml`, job `image_tests`) runs that test on every pull request, then starts
+the app from the same image with `NEXT_PRIVATE_INTERNAL_API_HOSTS=127.0.0.1`, runs the bootstrap
+job against it and runs `packages/app-tests/e2e/kerbwell-platform` (Playwright, request only):
+`/api/v1`, `/api/v2`, `/api/v2-beta` and the OpenAPI document return 404 on `localhost` even with
+a valid token, `/api/v2/envelope` returns 200 on `127.0.0.1` with the bootstrap token, any
+request carrying a Cloudflare edge header returns 404, and `/api/health` and `/signin` stay
+public. A skipped test fails the job. To run it locally, start the app the same way and set
+`KERBWELL_E2E_INTERNAL_URL=http://127.0.0.1:3000`, `KERBWELL_E2E_PUBLIC_URL=http://localhost:3000`
+and `KERBWELL_E2E_API_TOKEN`.
+
 ## Webhook signature
 
 Every delivery carries
