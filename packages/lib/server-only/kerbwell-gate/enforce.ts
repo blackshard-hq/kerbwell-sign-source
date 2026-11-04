@@ -5,6 +5,11 @@ import { DocumentAuth } from '../../types/document-auth';
 import { extractDocumentAuthMethods } from '../../utils/document-auth';
 import { getKerbwellGateConfig, type KerbwellGateConfig } from './config';
 import { getKerbwellGateSessionForRecipient, isKerbwellGateAuthFresh } from './session';
+import {
+  buildKerbwellPasskeyOfferUrl,
+  buildKerbwellSignerActionLinks,
+  type KerbwellSignerActionLinks,
+} from './signer-ui';
 
 /**
  * Whether this recipient may only be reached through the gate. Mode `all` covers every
@@ -111,8 +116,9 @@ export const hasKerbwellGateSessionForRecipient = async (cookieHeader: string | 
 };
 
 /**
- * What the signing UI may know about the gate session (K3 reads it: the typed signature defaults
- * to the CDD legal name, and upload is hidden for agency agreements).
+ * What the signing UI may know about the gate session: the typed signature defaults to the CDD
+ * legal name, upload is hidden for agency agreements, the "Something wrong?" panel links to the
+ * portal actions (or mails the agent), and the done page offers a passkey except in kiosk mode.
  */
 export type KerbwellGateSigningContext = {
   legalName: string;
@@ -120,6 +126,10 @@ export type KerbwellGateSigningContext = {
   acr: string;
   singleFactor: boolean;
   authTime: Date;
+  kiosk: boolean;
+  actions: KerbwellSignerActionLinks | null;
+  agentEmail: string | null;
+  passkeyUrl: string | null;
 };
 
 /**
@@ -149,6 +159,11 @@ export const resolveKerbwellGateForSigning = async ({
     };
   }
 
+  const meta = await prisma.documentMeta.findFirst({
+    where: { envelope: { id: session.envelopeId } },
+    select: { emailReplyTo: true },
+  });
+
   return {
     refused: false,
     context: {
@@ -157,6 +172,10 @@ export const resolveKerbwellGateForSigning = async ({
       acr: session.acr,
       singleFactor: session.acr === 'kw-sign-l1-single',
       authTime: session.authTime,
+      kiosk: session.mode === 'in_person',
+      actions: buildKerbwellSignerActionLinks(config, session),
+      agentEmail: meta?.emailReplyTo?.trim() || null,
+      passkeyUrl: buildKerbwellPasskeyOfferUrl(config, session),
     },
   };
 };

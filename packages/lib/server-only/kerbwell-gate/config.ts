@@ -17,6 +17,13 @@
  *                                          old. Default `<issuer>/signer`.
  * NEXT_PRIVATE_KERBWELL_GATE_MAX_AUTH_AGE  seconds an identity verification stays good for Complete.
  *                                          Default 900 (15 minutes).
+ * NEXT_PRIVATE_KERBWELL_GATE_ACTIONS_URL   the portal page behind the signing page's "Something wrong?"
+ *                                          panel, e.g. https://vendor.kerbwell.com.au/s/actions. The
+ *                                          fork links to it with action (ask, decline, wrong-person or
+ *                                          paper), recipient and envelope. Unset: Ask the agent mails
+ *                                          the agent and the other three open the fork's own decline.
+ * NEXT_PRIVATE_KERBWELL_GATE_PASSKEY_URL   the passkey offer the done page links to (not in kiosk
+ *                                          mode). Default `<issuer>/signer/passkey`, on the issuer origin.
  *
  * An `http:` issuer is accepted only on a loopback host (the CI image tests); anything else must
  * be https.
@@ -40,6 +47,8 @@ export type KerbwellGateConfig = {
   mode: KerbwellGateMode;
   reauthUrl: string;
   maxAuthAgeSeconds: number;
+  actionsUrl: string | null;
+  passkeyUrl: string;
 };
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
@@ -106,6 +115,17 @@ export const getKerbwellGateConfig = (env: NodeJS.ProcessEnv = process.env): Ker
     throw new Error('NEXT_PRIVATE_KERBWELL_GATE_MAX_AUTH_AGE must be a whole number of seconds from 60 to 900');
   }
 
+  const rawActionsUrl = env.NEXT_PRIVATE_KERBWELL_GATE_ACTIONS_URL?.trim() || null;
+  const actionsUrl = rawActionsUrl
+    ? parseOrigin(rawActionsUrl, 'NEXT_PRIVATE_KERBWELL_GATE_ACTIONS_URL').toString()
+    : null;
+
+  const passkeyUrl = env.NEXT_PRIVATE_KERBWELL_GATE_PASSKEY_URL?.trim() || `${issuer}/signer/passkey`;
+
+  if (parseOrigin(passkeyUrl, 'NEXT_PRIVATE_KERBWELL_GATE_PASSKEY_URL').origin !== issuerUrl.origin) {
+    throw new Error('NEXT_PRIVATE_KERBWELL_GATE_PASSKEY_URL must be on the issuer origin');
+  }
+
   return {
     issuer,
     jwksUrl,
@@ -113,5 +133,7 @@ export const getKerbwellGateConfig = (env: NodeJS.ProcessEnv = process.env): Ker
     mode: rawMode,
     reauthUrl,
     maxAuthAgeSeconds,
+    actionsUrl,
+    passkeyUrl,
   };
 };

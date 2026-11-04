@@ -38,6 +38,8 @@ run from `/app/apps/remix` against the same Postgres database.
 | `NEXT_PRIVATE_KERBWELL_GATE_ISSUER` | `https://auth.kerbwell.com.au`. Turns the Kerbwell gate on (see "Kerbwell gate" below). Unset, the gate is off and a token opens its document, as upstream | no |
 | `NEXT_PRIVATE_KERBWELL_GATE_MODE` | unset (`all`): every recipient needs the gate. `recipient` gates only recipients whose access or action auth names `KERBWELL_GATE`; `off` turns it off | no |
 | `NEXT_PRIVATE_KERBWELL_GATE_JWKS_URL`, `_AUDIENCE`, `_REAUTH_URL`, `_MAX_AUTH_AGE` | unset: `<issuer>/jwks`, `sign`, `<issuer>/signer`, `900`. The JWKS and re-auth URLs must be on the issuer's origin; the age is 60 to 900 seconds | no |
+| `NEXT_PRIVATE_KERBWELL_GATE_ACTIONS_URL` | the portal page behind "Something wrong?", e.g. `https://vendor.kerbwell.com.au/s/actions` (see "Signer UI" below). Unset: Ask the agent mails the agent, and Decline, Wrong person and Request paper use the fork's own decline with the reason filled in | no |
+| `NEXT_PRIVATE_KERBWELL_GATE_PASSKEY_URL` | unset: `<issuer>/signer/passkey`, the passkey offer on the done page. Must be on the issuer origin | no |
 | `NEXT_PRIVATE_CSP_SIGN_FRAME_ANCESTORS` | `https://client.kerbwell.com.au`: the only site that may frame `/sign` and `/d` (with `'self'`). With the gate on and this unset, they can be framed by this origin only | no |
 | `NEXT_PUBLIC_KERBWELL_ADMIN_OIDC_ONLY` | `true`: the admin UI is reached only by OIDC against Kerbwell Identity, for the `kerbwell-sign-admin` role with a passkey amr (see "Admin sign-in" below) | no |
 | `NEXT_PRIVATE_OIDC_WELL_KNOWN`, `NEXT_PRIVATE_OIDC_CLIENT_ID`, `NEXT_PRIVATE_OIDC_CLIENT_SECRET`, `NEXT_PRIVATE_OIDC_PROVIDER_LABEL` | `https://auth.kerbwell.com.au/.well-known/openid-configuration`, the `kerbwell-sign` client, its secret (Key Vault reference), `Kerbwell Account` | the secret |
@@ -154,6 +156,48 @@ its label, auth time, IDV reference, assertion id, document kind, mode, and the 
 and city from verification (the row's own ip and user agent are the browser at the gate), and
 whether it was a re-verification. `KERBWELL_CONSENT_GIVEN` the first time a recipient consents
 on a given consent version and hash.
+
+### The consent wording
+
+`consent_version` must be `au-eta-2026-11-v1` and `consent_hash` the SHA-256 (hex) of
+`kerbwellDisclosureCanonicalText()` as UTF-8, today
+`6c88c0f94961efa16aeab384fae07714a1f95b78ab689fdeb1908ebf999ecb98`. Both live in
+`packages/lib/constants/kerbwell-disclosure.ts`, which is also the text of
+`/articles/signature-disclosure`. The gate's consent screen shows the same wording. A change to
+the wording is a new version and a new hash; the unit test fails until the constant, the version
+and the hash agree.
+
+### Signer UI
+
+Behind a gate session the signing page:
+
+- opens the signature dialog on Type, filled with `legal_name` in the signature font, so it is
+  adopted with one tap ("Adopt signature"); Draw is an equal tab. Upload is never offered when
+  `doc_kind` is `agency_agreement`: the loader turns `uploadSignatureEnabled` off for that
+  recipient whatever the document settings say. Dispatch should also send agency agreements with
+  `uploadSignatureEnabled: false`, because a drawn and an uploaded signature are both images and
+  the server cannot tell them apart.
+- never bulk-signs fields (the upstream auto-sign dialog is off), so every signature and initial
+  is its own tap. The final button reads "Sign agreement" beside "By tapping Sign agreement I sign
+  this document and agree to be bound by it."
+- shows "Something wrong?" (the sidebar on a desktop, a button in the bottom bar on a phone). With
+  `NEXT_PRIVATE_KERBWELL_GATE_ACTIONS_URL` set, each action links to
+  `<actions url>?action=<ask|decline|wrong-person|paper>&recipient=<id>&envelope=<id>`; the
+  portal maps that to its gate record and confirms with the signer there.
+- gives every field on the canvas a focusable button over its box, so Next field moves focus to
+  the field and Enter or Space fills it (no drag, no pointer).
+- ends on a done page that says the executed PDF is emailed when everyone has signed, offers the
+  current copy, and links to `<passkey url>?recipient=<id>&envelope=<id>` unless `mode` was
+  `in_person`.
+
+Phone speed: the build writes brotli and gzip copies of every client asset
+(`apps/remix/.bin/precompress.mjs`) and `server/main.js` serves them (`precompressed: true`), so
+the signing page is about 1.3 MB on the wire instead of 4.9 MB while nothing in front of the app
+compresses. The signing route preloads the pdf.js worker from its first byte of HTML, and the
+viewer chunk starts downloading as soon as the page's modules run.
+
+`packages/app-tests/e2e/kerbwell-signer-ui` checks this on a phone viewport, including an axe
+WCAG 2.2 AA run on the signing page and the signature dialog.
 
 ### The agent on the inactive page
 

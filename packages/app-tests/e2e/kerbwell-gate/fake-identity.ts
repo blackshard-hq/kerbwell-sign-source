@@ -32,7 +32,15 @@ export type AssertionInput = {
   docKind?: string;
   idvRef?: string | null;
   audience?: string;
+  mode?: 'remote' | 'in_person';
 };
+
+/**
+ * One signing key per test process. The app caches the JWKS and refetches on an unknown kid at
+ * most every 30 seconds, so every spec file in a run (gate, signer UI) signs with the same key.
+ */
+const PROCESS_KID = `e2e-${randomBytes(6).toString('hex')}`;
+let processKeyPair: ReturnType<typeof generateKeyPair> | null = null;
 
 type AdminLogin = { email: string; name: string; roles: string[]; amr: string[] };
 
@@ -57,7 +65,7 @@ export class FakeKerbwellIdentity {
   private privateKey!: CryptoKey;
   private jwk!: JWK;
   // A new kid per run, so an app that cached an earlier run's key set fetches this one.
-  private readonly kid = `e2e-${randomBytes(6).toString('hex')}`;
+  private readonly kid = PROCESS_KID;
   private readonly codes = new Map<string, AdminLogin>();
 
   /** The next admin OIDC sign-in's identity. */
@@ -69,7 +77,8 @@ export class FakeKerbwellIdentity {
   constructor(private readonly appUrl: string) {}
 
   async start() {
-    const { privateKey, publicKey } = await generateKeyPair('ES256', { extractable: true });
+    processKeyPair ??= generateKeyPair('ES256', { extractable: true });
+    const { privateKey, publicKey } = await processKeyPair;
     this.privateKey = privateKey;
     this.jwk = { ...(await exportJWK(publicKey)), kid: this.kid, alg: 'ES256', use: 'sig' };
 
@@ -109,7 +118,7 @@ export class FakeKerbwellIdentity {
       ip: '203.0.113.10',
       ua: 'Mozilla/5.0 (e2e)',
       cf_city: 'Brisbane',
-      mode: 'remote',
+      mode: input.mode ?? 'remote',
     })
       .setProtectedHeader({ alg: 'ES256', kid: this.kid })
       .setIssuer(GATE_ISSUER)

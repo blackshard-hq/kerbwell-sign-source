@@ -33,6 +33,7 @@ import { SigningCard3D } from '@documenso/ui/components/signing-card';
 import { Trans } from '@lingui/react/macro';
 import { DocumentSigningOrder, DocumentStatus, RecipientRole, SigningStatus } from '@prisma/client';
 import { Clock8 } from 'lucide-react';
+import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker?url';
 import { Link, redirect } from 'react-router';
 import { getOptionalLoaderContext } from 'server/utils/get-loader-session';
 import { match } from 'ts-pattern';
@@ -46,7 +47,10 @@ import { DocumentSigningPageViewV1 } from '~/components/general/document-signing
 import { DocumentSigningPageViewV2 } from '~/components/general/document-signing/document-signing-page-view-v2';
 import { DocumentSigningProvider } from '~/components/general/document-signing/document-signing-provider';
 import { EnvelopeSigningProvider } from '~/components/general/document-signing/envelope-signing-provider';
-import { KerbwellGateSigningProvider } from '~/components/general/kerbwell/gate-signing-context';
+import {
+  KerbwellGateSigningProvider,
+  useKerbwellGateSigning,
+} from '~/components/general/kerbwell/gate-signing-context';
 import { RecipientBranding } from '~/components/general/recipient-branding';
 import { useCspNonce } from '~/utils/nonce';
 import { superLoaderJson, useSuperLoaderData } from '~/utils/super-json-loader';
@@ -179,7 +183,7 @@ const handleV1Loader = async ({ params, request }: Route.LoaderArgs) => {
 
   return {
     isDocumentAccessValid: true,
-    document,
+    document: { ...document, documentMeta: withKerbwellSignatureTypes(document.documentMeta, kerbwellGate.context) },
     fields,
     recipient,
     recipientWithFields,
@@ -195,6 +199,18 @@ const handleV1Loader = async ({ params, request }: Route.LoaderArgs) => {
     kerbwellGate: kerbwellGate.context,
   } as const;
 };
+
+/**
+ * Kerbwell: an agency agreement is never signed with an uploaded image, whatever the document
+ * settings say (the gate session's doc_kind decides). Draw and type stay as set.
+ */
+const withKerbwellSignatureTypes = <T extends { uploadSignatureEnabled: boolean } | null>(
+  documentMeta: T,
+  gate: { docKind: string } | null,
+): T =>
+  documentMeta && gate?.docKind === 'agency_agreement'
+    ? { ...documentMeta, uploadSignatureEnabled: false }
+    : documentMeta;
 
 const handleV2Loader = async ({ params, request }: Route.LoaderArgs) => {
   const { token } = params;
@@ -347,10 +363,25 @@ const handleV2Loader = async ({ params, request }: Route.LoaderArgs) => {
 
   return {
     isDocumentAccessValid: true,
-    envelopeForSigning,
+    envelopeForSigning: {
+      ...envelopeForSigning,
+      envelope: {
+        ...envelopeForSigning.envelope,
+        documentMeta: withKerbwellSignatureTypes(envelopeForSigning.envelope.documentMeta, kerbwellGate.context),
+      },
+    },
     kerbwellGate: kerbwellGate.context,
   } as const;
 };
+
+/**
+ * Kerbwell: fetch the pdf.js worker (the largest download on the page) from the first byte of
+ * HTML, alongside the page's own modules, instead of after they have run. Its URL is hashed and
+ * served immutable, so pdf.js's own request for it is answered from the HTTP cache.
+ */
+export function links() {
+  return [{ rel: 'preload', href: pdfjsWorkerUrl, as: 'fetch', crossOrigin: 'anonymous' as const }];
+}
 
 export async function loader(loaderArgs: Route.LoaderArgs) {
   const { token } = loaderArgs.params;
@@ -427,6 +458,7 @@ export default function SigningPage() {
 }
 
 const SigningPageV1 = ({ data }: { data: Awaited<ReturnType<typeof handleV1Loader>> }) => {
+  const gate = useKerbwellGateSigning();
   const { sessionData } = useOptionalSession();
 
   const user = sessionData?.user;
@@ -484,7 +516,7 @@ const SigningPageV1 = ({ data }: { data: Awaited<ReturnType<typeof handleV1Loade
   return (
     <DocumentSigningProvider
       email={recipient.email}
-      fullName={user?.email === recipient.email ? user?.name : recipient.name}
+      fullName={gate?.legalName || (user?.email === recipient.email ? user?.name : recipient.name)}
       signature={user?.email === recipient.email ? user?.signature : undefined}
       typedSignatureEnabled={document.documentMeta?.typedSignatureEnabled}
       uploadSignatureEnabled={document.documentMeta?.uploadSignatureEnabled}
@@ -511,6 +543,7 @@ const SigningPageV1 = ({ data }: { data: Awaited<ReturnType<typeof handleV1Loade
 };
 
 const SigningPageV2 = ({ data }: { data: Awaited<ReturnType<typeof handleV2Loader>> }) => {
+  const gate = useKerbwellGateSigning();
   const { sessionData } = useOptionalSession();
   const user = sessionData?.user;
 
@@ -570,7 +603,7 @@ const SigningPageV2 = ({ data }: { data: Awaited<ReturnType<typeof handleV2Loade
     <EnvelopeSigningProvider
       envelopeData={data.envelopeForSigning}
       email={recipient.email}
-      fullName={user?.email === recipient.email ? user?.name : recipient.name}
+      fullName={gate?.legalName || (user?.email === recipient.email ? user?.name : recipient.name)}
       signature={user?.email === recipient.email ? user?.signature : undefined}
     >
       <DocumentSigningAuthProvider documentAuthOptions={envelope.authOptions} recipient={recipient} user={user}>

@@ -268,6 +268,8 @@ export const SignaturePadDraw = ({ className, value, onChange, ...props }: Signa
           'dark:hue-rotate-180 dark:invert': selectedColor === 'black',
         })}
         style={{ touchAction: 'none' }}
+        role="img"
+        aria-label="Draw your signature here"
         onPointerMove={(event) => onMouseMove(event)}
         onPointerDown={(event) => onMouseDown(event)}
         onPointerUp={(event) => onMouseUp(event)}
@@ -281,7 +283,7 @@ export const SignaturePadDraw = ({ className, value, onChange, ...props }: Signa
       <div className="absolute right-3 bottom-3 flex gap-2">
         <button
           type="button"
-          className="rounded-full p-0 text-[0.688rem] text-muted-foreground/60 ring-offset-background hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full px-2 text-muted-foreground text-xs ring-offset-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => onClearClick()}
         >
           <Trans>Clear Signature</Trans>
@@ -301,7 +303,7 @@ export const SignaturePadDraw = ({ className, value, onChange, ...props }: Signa
           <button
             type="button"
             title="undo"
-            className="rounded-full p-0 text-[0.688rem] text-muted-foreground/60 ring-offset-background hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full px-2 text-muted-foreground text-xs ring-offset-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={onUndoClick}
           >
             <Undo2 className="h-4 w-4" />

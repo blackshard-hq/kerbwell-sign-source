@@ -5,6 +5,7 @@ import { loadRecipientBrandingByTeamId } from '@documenso/lib/server-only/brandi
 import { getDocumentAndSenderByToken } from '@documenso/lib/server-only/document/get-document-by-token';
 import { isRecipientAuthorized } from '@documenso/lib/server-only/document/is-recipient-authorized';
 import { getFieldsForToken } from '@documenso/lib/server-only/field/get-fields-for-token';
+import { resolveKerbwellGateForSigning } from '@documenso/lib/server-only/kerbwell-gate';
 import { getRecipientByToken } from '@documenso/lib/server-only/recipient/get-recipient-by-token';
 import { getRecipientSignatures } from '@documenso/lib/server-only/recipient/get-recipient-signatures';
 import { getTeamSettings } from '@documenso/lib/server-only/team/get-team-settings';
@@ -75,9 +76,14 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     } as const;
   }
 
-  const [signatures, settings] = await Promise.all([
+  const [signatures, settings, kerbwellGate] = await Promise.all([
     getRecipientSignatures({ recipientId: recipient.id }),
     getTeamSettings({ teamId: document.teamId }),
+    resolveKerbwellGateForSigning({
+      cookieHeader: request.headers.get('cookie'),
+      recipient,
+      documentAuth: document.authOptions,
+    }),
   ]);
 
   // The same logo the signing page header shows: the team's own when branding is on, else the house lockup.
@@ -106,6 +112,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     returnToHomePath,
     branding,
     hasCustomBrandingLogo,
+    kerbwellGate: kerbwellGate.context,
   };
 }
 
@@ -127,6 +134,7 @@ export default function CompletedSigningPage({ loaderData }: Route.ComponentProp
     returnToHomePath,
     branding,
     hasCustomBrandingLogo,
+    kerbwellGate,
   } = loaderData;
 
   // Poll signing status every few seconds
@@ -239,25 +247,35 @@ export default function CompletedSigningPage({ loaderData }: Route.ComponentProp
 
             {match({ status: signingStatus, deletedAt: document.deletedAt })
               .with({ status: 'COMPLETED' }, () => (
-                <p className="mt-2.5 max-w-[60ch] text-center font-medium text-muted-foreground/60 text-sm md:text-base">
+                <p className="mt-2.5 max-w-[60ch] text-center font-medium text-muted-foreground text-sm md:text-base">
                   <Trans>Everyone has signed! You will receive an email copy of the signed document.</Trans>
                 </p>
               ))
               .with({ status: 'PROCESSING' }, () => (
-                <p className="mt-2.5 max-w-[60ch] text-center font-medium text-muted-foreground/60 text-sm md:text-base">
+                <p className="mt-2.5 max-w-[60ch] text-center font-medium text-muted-foreground text-sm md:text-base">
                   <Trans>
                     All recipients have signed. The document is being processed and you will receive an email copy
                     shortly.
                   </Trans>
                 </p>
               ))
-              .with({ deletedAt: null }, () => (
-                <p className="mt-2.5 max-w-[60ch] text-center font-medium text-muted-foreground/60 text-sm md:text-base">
-                  <Trans>You will receive an email copy of the signed document once everyone has signed.</Trans>
-                </p>
-              ))
+              .with({ deletedAt: null }, () =>
+                kerbwellGate ? (
+                  <p
+                    className="mt-2.5 max-w-[60ch] text-center font-medium text-foreground text-sm md:text-base"
+                    data-testid="kw-done-copy"
+                  >
+                    Your signature is recorded. The executed PDF is emailed to every party when everyone has signed. You
+                    can download the current copy now.
+                  </p>
+                ) : (
+                  <p className="mt-2.5 max-w-[60ch] text-center font-medium text-muted-foreground text-sm md:text-base">
+                    <Trans>You will receive an email copy of the signed document once everyone has signed.</Trans>
+                  </p>
+                ),
+              )
               .otherwise(() => (
-                <p className="mt-2.5 max-w-[60ch] text-center font-medium text-muted-foreground/60 text-sm md:text-base">
+                <p className="mt-2.5 max-w-[60ch] text-center font-medium text-muted-foreground text-sm md:text-base">
                   <Trans>
                     This document has been cancelled by the owner and is no longer available for others to sign.
                   </Trans>
@@ -265,7 +283,7 @@ export default function CompletedSigningPage({ loaderData }: Route.ComponentProp
               ))}
 
             <div className="mt-8 flex w-full max-w-xs flex-col items-stretch gap-4 md:w-auto md:max-w-none md:flex-row md:items-center">
-              {isDocumentCompleted(document) && (
+              {(isDocumentCompleted(document) || (kerbwellGate && !document.deletedAt)) && (
                 <EnvelopeDownloadDialog
                   envelopeId={document.envelopeId}
                   envelopeStatus={document.status}
@@ -274,10 +292,22 @@ export default function CompletedSigningPage({ loaderData }: Route.ComponentProp
                   trigger={
                     <Button type="button" variant="outline" className="flex-1 md:flex-initial">
                       <DownloadIcon className="mr-2 h-5 w-5" />
-                      <Trans>Download</Trans>
+                      {kerbwellGate && !isDocumentCompleted(document) ? (
+                        'Download current copy'
+                      ) : (
+                        <Trans>Download</Trans>
+                      )}
                     </Button>
                   }
                 />
+              )}
+
+              {kerbwellGate?.passkeyUrl && (
+                <Button asChild variant="default" className="min-h-11 flex-1 md:flex-initial">
+                  <a href={kerbwellGate.passkeyUrl} data-testid="kw-passkey-offer">
+                    Set up a passkey for next time
+                  </a>
+                </Button>
               )}
 
               {user && (
@@ -297,7 +327,7 @@ export default function CompletedSigningPage({ loaderData }: Route.ComponentProp
                   <Trans>Need to sign documents?</Trans>
                 </h2>
 
-                <p className="mt-4 max-w-[55ch] text-center text-muted-foreground/60 leading-normal">
+                <p className="mt-4 max-w-[55ch] text-center text-muted-foreground leading-normal">
                   <Trans>Create your account and start using state-of-the-art document signing.</Trans>
                 </p>
 

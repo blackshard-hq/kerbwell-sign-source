@@ -144,6 +144,8 @@ describe('getKerbwellGateConfig', () => {
       mode: 'all',
       reauthUrl: `${ISSUER}/signer`,
       maxAuthAgeSeconds: 900,
+      actionsUrl: null,
+      passkeyUrl: `${ISSUER}/signer/passkey`,
     });
   });
 

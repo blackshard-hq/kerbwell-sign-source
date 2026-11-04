@@ -54,6 +54,10 @@ jobs:
         run: npx vitest run server-only/kerbwell-gate
         working-directory: packages/lib
 
+      - name: Kerbwell signing disclosure (unit)
+        run: npx vitest run constants/kerbwell-disclosure
+        working-directory: packages/lib
+
       - name: Kerbwell gate page guard (unit)
         run: npx vitest run server/api/kerbwell-gate.test.ts
         working-directory: apps/remix
@@ -171,7 +175,7 @@ jobs:
         working-directory: packages/app-tests
         run: npx playwright install --with-deps chromium
 
-      - name: Playwright gate and admin sign-in specs
+      - name: Playwright gate, admin sign-in and signer UI specs
         working-directory: packages/app-tests
         env:
           KERBWELL_E2E_GATE_ISSUER: 'http://127.0.0.1:4455'
@@ -179,10 +183,12 @@ jobs:
           KERBWELL_E2E_OIDC_CLIENT_ID: 'kerbwell-sign-e2e'
           NEXT_PUBLIC_WEBAPP_URL: 'http://localhost:3000'
         run: |
-          NODE_OPTIONS='--import tsx' npx playwright test e2e/kerbwell-gate \
+          # One run: the stand-in identity signs with one key per process, and the app refetches
+          # an unknown key at most every 30 seconds.
+          NODE_OPTIONS='--import tsx' npx playwright test e2e/kerbwell-gate e2e/kerbwell-signer-ui \
             --project ui --workers 1 --retries 0 --reporter list | tee pw-gate.log
           grep -qE '[0-9]+ passed' pw-gate.log
-          if grep -qE '[0-9]+ (skipped|failed|flaky)' pw-gate.log; then echo "::error::a gate test was skipped or failed"; exit 1; fi
+          if grep -qE '[0-9]+ (skipped|failed|flaky)' pw-gate.log; then echo "::error::a gate or signer UI test was skipped or failed"; exit 1; fi
 
       - name: App log on failure
         if: failure()

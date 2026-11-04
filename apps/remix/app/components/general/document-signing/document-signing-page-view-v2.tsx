@@ -36,9 +36,11 @@ import { DocumentSigningAttachmentsPopover } from '../document-signing/document-
 import { EnvelopeItemSelector } from '../envelope-editor/envelope-file-selector';
 import EnvelopeSignerForm from '../envelope-signing/envelope-signer-form';
 import { EnvelopeSignerHeader } from '../envelope-signing/envelope-signer-header';
+import { useKerbwellGateSigning } from '../kerbwell/gate-signing-context';
 import { DocumentSigningMobileWidget } from './document-signing-mobile-widget';
 import { DocumentSigningRejectDialog } from './document-signing-reject-dialog';
 import { useRequiredEnvelopeSigningContext } from './envelope-signing-provider';
+import { KerbwellSomethingWrong } from './kerbwell-something-wrong';
 
 export const DocumentSigningPageViewV2 = () => {
   const { envelopeItems, currentEnvelopeItem, setCurrentEnvelopeItem } = useCurrentEnvelopeRender();
@@ -63,6 +65,7 @@ export const DocumentSigningPageViewV2 = () => {
   } = useEmbedSigningContext() || {};
 
   const { t } = useLingui();
+  const kerbwellGate = useKerbwellGateSigning();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   /**
@@ -79,7 +82,7 @@ export const DocumentSigningPageViewV2 = () => {
   }, [recipientFieldsRemaining, selectedAssistantRecipientFields, currentEnvelopeItem]);
 
   return (
-    <div className="min-h-screen w-screen bg-gray-50 dark:bg-background">
+    <div className="kw-signing min-h-screen w-full max-w-full overflow-x-hidden bg-gray-50 dark:bg-background">
       <SignFieldEmailDialog.Root />
       <SignFieldTextDialog.Root />
       <SignFieldNumberDialog.Root />
@@ -92,7 +95,7 @@ export const DocumentSigningPageViewV2 = () => {
       <EnvelopeSignerHeader />
 
       {/* Main Content Area */}
-      <div className="flex h-[calc(100vh-4rem)] w-screen">
+      <div className="flex h-[calc(100dvh-4rem)] w-full">
         {/* Left Section - Step Navigation */}
         <div
           className={cn(
@@ -192,7 +195,7 @@ export const DocumentSigningPageViewV2 = () => {
                   }
                 />
 
-                {envelope.type === EnvelopeType.DOCUMENT && allowDocumentRejection && (
+                {envelope.type === EnvelopeType.DOCUMENT && allowDocumentRejection && !kerbwellGate && (
                   <DocumentSigningRejectDialog
                     documentId={mapSecondaryIdToDocumentId(envelope.secondaryId)}
                     token={recipient.token}
@@ -218,6 +221,16 @@ export const DocumentSigningPageViewV2 = () => {
               </div>
             )}
 
+            {!isDirectTemplate && envelope.type === EnvelopeType.DOCUMENT && (
+              <KerbwellSomethingWrong
+                variant="panel"
+                className="mt-6 px-4"
+                documentId={mapSecondaryIdToDocumentId(envelope.secondaryId)}
+                documentTitle={envelope.title}
+                token={recipient.token}
+              />
+            )}
+
             <div className="embed--DocumentWidgetFooter mt-auto">
               {/* Footer of left sidebar. */}
               {!isEmbed && (
@@ -234,7 +247,10 @@ export const DocumentSigningPageViewV2 = () => {
           </div>
         </div>
 
-        <div className="embed--DocumentContainer min-w-0 flex-1 overflow-y-auto" ref={scrollableContainerRef}>
+        <div
+          className="embed--DocumentContainer kw-signing-scroll min-w-0 flex-1 overflow-y-auto"
+          ref={scrollableContainerRef}
+        >
           <div className="flex flex-col">
             {/* Horizontal envelope item selector */}
             {envelopeItems.length > 1 && (

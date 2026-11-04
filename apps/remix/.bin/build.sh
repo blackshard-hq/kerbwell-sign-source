@@ -28,6 +28,9 @@ npm run build:server
 # Copy over the entry point for the server.
 cp server/main.js build/server/main.js
 
+# Brotli and gzip copies of the client assets, served by main.js (precompressed: true).
+node .bin/precompress.mjs build/client
+
 # Copy over all web.js translations
 cp -r ../../packages/lib/translations build/server/hono/packages/lib/translations
 

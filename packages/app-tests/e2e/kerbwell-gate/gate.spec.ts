@@ -47,6 +47,21 @@ const openThroughGate = async (page: Page, assertion: string) => {
 
 const freshPage = async (browser: Browser) => (await browser.newContext()).newPage();
 
+/**
+ * Complete, then Sign agreement. A click that lands before the page has hydrated opens nothing,
+ * so Complete is clicked again until the confirmation dialog is up.
+ */
+const completeAndSign = async (page: Page) => {
+  const sign = page.getByRole('dialog').getByRole('button', { name: 'Sign agreement' });
+
+  await expect(async () => {
+    await page.getByRole('button', { name: 'Complete' }).click();
+    await expect(sign).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
+
+  await sign.click();
+};
+
 const INACTIVE = 'This link is no longer active';
 const RETRY = 'We could not confirm it is you';
 
@@ -207,8 +222,7 @@ test.describe('kerbwell gate', () => {
       await expect(page.getByRole('heading', { name: 'Sign Document' })).toBeVisible();
 
       const reauth = page.waitForRequest((req) => req.url().startsWith(`${identity.issuer}/signer?`));
-      await page.getByRole('button', { name: 'Complete' }).click();
-      await page.getByRole('button', { name: 'Sign' }).click();
+      await completeAndSign(page);
 
       const reauthUrl = new URL((await reauth).url());
       expect(reauthUrl.searchParams.get('prompt')).toBe('login');
@@ -218,8 +232,7 @@ test.describe('kerbwell gate', () => {
       await page.waitForURL(new RegExp(`${signUrl}$`));
       await expect(page.getByRole('heading', { name: 'Sign Document' })).toBeVisible();
 
-      await page.getByRole('button', { name: 'Complete' }).click();
-      await page.getByRole('button', { name: 'Sign' }).click();
+      await completeAndSign(page);
       await page.waitForURL(new RegExp(`${signUrl}/complete$`));
 
       const verified = await prisma.documentAuditLog.count({
@@ -244,8 +257,7 @@ test.describe('kerbwell gate', () => {
         page,
         await identity.mintAssertion({ recipientId: recipients[0].id, envelopeId, authTime: now - 14 * 60 }),
       );
-      await page.getByRole('button', { name: 'Complete' }).click();
-      await page.getByRole('button', { name: 'Sign' }).click();
+      await completeAndSign(page);
       await page.waitForURL(new RegExp(`${signUrl}/complete$`));
       expect(reauthRequested).toBe(false);
     }
@@ -283,8 +295,7 @@ test.describe('kerbwell gate', () => {
     // No auth prompt: the gate cookie is the proof.
     await expect(page.getByText('Reauthentication is required')).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'Complete' }).click();
-    await page.getByRole('button', { name: 'Sign' }).click();
+    await completeAndSign(page);
     await page.waitForURL(new RegExp(`${signUrl}/complete$`));
 
     const signed = await prisma.recipient.findUniqueOrThrow({ where: { id: recipient.id } });
