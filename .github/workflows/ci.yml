@@ -47,4 +47,7 @@ jobs:
           push: false
           context: .
           file: ./docker/Dockerfile
+          # Compile check only: the shipped target needs a published source URL
+          # (kerbwell-source.yml builds that one).
+          target: unpublished
           tags: documenso-${{ github.sha }}

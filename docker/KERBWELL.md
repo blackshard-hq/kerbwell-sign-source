@@ -104,10 +104,24 @@ receiver is `verifyWebhookSignature` in
 `blackshard-hq/kerbwell-sign` is private. The source of every build is published to the public,
 read-only mirror `blackshard-hq/kerbwell-sign-source` before the image is built:
 
+    docker/kerbwell-source.sh image HEAD kerbwellacr.azurecr.io/kerbwell-esign:<sha>
+
+`image` scans and publishes the tree, checks the link, then builds from a `git archive` of
+exactly that commit with `KERBWELL_SOURCE_URL` and `KERBWELL_SOURCE_REVISION` set. By hand:
+
     docker/kerbwell-source.sh release HEAD    # scan, push, check; prints the URL
     docker build -f docker/Dockerfile \
       --build-arg KERBWELL_SOURCE_URL="$(docker/kerbwell-source.sh url HEAD)" \
       --build-arg KERBWELL_SOURCE_REVISION="$(git rev-parse HEAD)" .
+
+The Dockerfile enforces this whichever route builds the image. Its default target (`runner`)
+depends on a `source-gate` stage that runs `docker/kerbwell-source-gate.mjs`, and the build
+fails unless `KERBWELL_SOURCE_URL` is
+`https://github.com/blackshard-hq/kerbwell-sign-source/tree/src-<12 hex>` and that URL answers
+200 to an anonymous request. An empty value, a commit of the private repository, another
+repository and a tag that was never published all fail the build. The `unpublished` target is
+the app without the link (label `au.com.kerbwell.unpublished=true`); CI and
+`docker/testing/compose.yml` build it only to check the code compiles. Never push or deploy it.
 
 - The mirror commit has exactly the build's git tree (no fork history) and is tagged
   `src-<first 12 of the tree id>`. Anyone can match it: `git rev-parse <commit>^{tree}`.
@@ -121,3 +135,6 @@ read-only mirror `blackshard-hq/kerbwell-sign-source` before the image is built:
   (`au.com.kerbwell.source-url`) and the revision.
 - `.github/workflows/kerbwell-source.yml` does this on every push to `main`, with a write
   deploy key on the mirror only (`KERBWELL_SOURCE_DEPLOY_KEY`).
+  On every pull request it also builds the `source-gate` stage with an empty URL, a private
+  commit, an unpublished tag and another host, and fails unless each is refused and a
+  published tag passes.

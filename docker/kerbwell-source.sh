@@ -16,6 +16,14 @@
 #   kerbwell-source.sh publish [REV]   scan, then push the snapshot and tag to the mirror (idempotent)
 #   kerbwell-source.sh check   URL     exit 0 only when URL answers 200 to an anonymous request
 #   kerbwell-source.sh release [REV]   publish, then check; prints the URL on success
+#   kerbwell-source.sh image   REV TAG [TAG...]
+#                                      release, then build the image from exactly REV's tree
+#                                      (git archive) with its source URL and revision; the
+#                                      Dockerfile's source-gate stage checks the URL again
+#
+# Every route to a shipped image goes through docker/Dockerfile's default target, which fails
+# unless KERBWELL_SOURCE_URL is a published mirror tag answering 200 anonymously
+# (docker/kerbwell-source-gate.mjs). `image` is the short way to satisfy it.
 #
 # Environment:
 #   KERBWELL_SOURCE_MIRROR      owner/name of the public mirror (default blackshard-hq/kerbwell-sign-source)
@@ -119,6 +127,34 @@ check() {
   return 1
 }
 
+image() {
+  local rev="${1:-}" url commit work
+  shift || true
+  [[ -n "$rev" && $# -ge 1 ]] || die "image needs REV and at least one TAG"
+  command -v docker >/dev/null || die "docker is not installed"
+  commit="$(commit_of "$rev")"
+  publish "$rev"
+  url="$(url_of "$rev")"
+  check "$url"
+
+  local tags=()
+  for tag in "$@"; do tags+=(-t "$tag"); done
+  work="$(mktemp -d)"
+  git -C "$ROOT" archive --format=tar "$commit" | tar -x -C "$work"
+  # --no-cache-filter: the gate asks GitHub again on every build, never a cached pass.
+  if ! docker build -f "$work/docker/Dockerfile" --no-cache-filter source-gate \
+    --build-arg KERBWELL_SOURCE_URL="$url" \
+    --build-arg KERBWELL_SOURCE_REVISION="$commit" \
+    "${tags[@]}" "$work" >&2; then
+    rm -rf "$work"
+    say "image build failed for $commit"
+    return 1
+  fi
+  rm -rf "$work"
+  say "built ${*} from $commit with source $url"
+  printf '%s\n' "$url"
+}
+
 cmd="${1:-}"
 shift || true
 case "$cmd" in
@@ -132,5 +168,6 @@ case "$cmd" in
     url_of "${1:-HEAD}"
     echo
     ;;
-  *) die "usage: kerbwell-source.sh url|scan|publish|release [REV] | check URL" ;;
+  image) image "$@" ;;
+  *) die "usage: kerbwell-source.sh url|scan|publish|release [REV] | check URL | image REV TAG..." ;;
 esac

@@ -26,6 +26,8 @@ services:
     build:
       context: ../../
       dockerfile: docker/Dockerfile
+      # Local test runs only; a shipped image builds the default target with its source URL.
+      target: unpublished
     depends_on:
       database:
         condition: service_healthy

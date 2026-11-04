@@ -4,7 +4,10 @@ name: 'Kerbwell source and platform'
 # main first publishes its exact source tree to the public read-only mirror
 # (blackshard-hq/kerbwell-sign-source, tag src-<tree12>, docker/kerbwell-source.sh), checks the
 # link answers 200 without sign-in, and only then builds the image with BRAND_SOURCE_URL set
-# to it. A failed scan, push or check fails the build.
+# to it. A failed scan, push or check fails the build. The Dockerfile enforces the same rule on
+# its own: its default target will not build unless KERBWELL_SOURCE_URL is a published mirror
+# tag that answers 200 anonymously (docker/kerbwell-source-gate.mjs), so no other build route
+# can ship an image without public source.
 #
 # The platform tests (internal API host lock, timestamped webhook signature, bootstrap
 # defaults) run on every pull request.
@@ -46,8 +49,12 @@ jobs:
         run: npx vitest run server/middleware.test.ts
         working-directory: apps/remix
 
+      - name: Source gate logic
+        run: node --test docker/kerbwell-source-gate.test.mjs
+
       - name: Bootstrap and source scripts parse
         run: |
+          node --check docker/kerbwell-source-gate.mjs
           node --check docker/kerbwell-bootstrap.mjs
           node --check docker/kerbwell-bootstrap.test.mjs
           bash -n docker/kerbwell-source.sh
@@ -70,10 +77,52 @@ jobs:
           fi
           echo "refused, as it must be"
 
+  source_gate_build:
+    name: Image build refuses a missing or private source URL
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      # The default target depends on the source-gate stage, so building that stage is the
+      # same check every image build runs, in seconds instead of a full build.
+      - name: The Dockerfile gate refuses, then passes, as it must
+        run: |
+          gate() {
+            docker buildx build --load --target source-gate --no-cache-filter source-gate \
+              --build-arg KERBWELL_SOURCE_ATTEMPTS=1 --build-arg KERBWELL_SOURCE_URL="$1" \
+              -f docker/Dockerfile -t kerbwell-source-gate:ci . >/dev/null 2>gate.log
+          }
+          refuse() {
+            if gate "$1"; then
+              echo "::error::the image build passed with KERBWELL_SOURCE_URL=[$1]"
+              exit 1
+            fi
+            grep -q 'refused' gate.log || { cat gate.log; echo "::error::failed for another reason"; exit 1; }
+            echo "refused: [$1]"
+          }
+          refuse ''
+          refuse "https://github.com/${GITHUB_REPOSITORY}/tree/${GITHUB_SHA}"
+          refuse 'https://github.com/blackshard-hq/kerbwell-sign-source/tree/src-000000000000'
+          refuse 'https://example.com/source'
+          # A snapshot tag that is on the public mirror (the first published build).
+          gate 'https://github.com/blackshard-hq/kerbwell-sign-source/tree/src-d761f5d44375' || { cat gate.log; exit 1; }
+          echo "passed a published mirror tag"
+          # The full default target with no URL stops at the gate.
+          if docker buildx build --build-arg KERBWELL_SOURCE_ATTEMPTS=1 -f docker/Dockerfile . >/dev/null 2>full.log; then
+            echo "::error::the default target built with no source URL"
+            exit 1
+          fi
+          grep -q 'refused' full.log || { tail -40 full.log; echo "::error::failed for another reason"; exit 1; }
+          echo "default target refused with no source URL"
+
   publish_source:
     name: Publish source, then build the image
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    needs: [platform_tests, source_check_negative]
+    needs: [platform_tests, source_check_negative, source_gate_build]
     runs-on: ubuntu-latest
     outputs:
       source_url: ${{ steps.release.outputs.source_url }}
@@ -119,6 +168,7 @@ jobs:
           context: .
           file: ./docker/Dockerfile
           tags: kerbwell-esign:${{ github.sha }}
+          no-cache-filters: source-gate
           build-args: |
             KERBWELL_SOURCE_URL=${{ steps.release.outputs.source_url }}
             KERBWELL_SOURCE_REVISION=${{ github.sha }}

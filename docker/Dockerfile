@@ -86,7 +86,10 @@ RUN turbo run build --filter=@documenso/remix...
 ###########################
 #     RUNNER CONTAINER    #
 ###########################
-FROM base AS runner
+# The app without its corresponding-source link. Never ship this stage on its own: the default
+# target (`runner`, at the end of this file) adds the link and fails without it. CI builds
+# `--target unpublished` only to check the image still compiles on a pull request.
+FROM base AS unpublished
 
 ENV HUSKY 0
 ENV DOCKER_OUTPUT 1
@@ -149,17 +152,51 @@ COPY --chown=nodejs:nodejs ./docker/prisma-migrate-deploy.mjs /app/apps/remix/pr
 # Kerbwell Sign: the one-shot setup job (admin, organisation, team, API token, webhook).
 COPY --chown=nodejs:nodejs ./docker/kerbwell-bootstrap.mjs /app/apps/remix/kerbwell-bootstrap.mjs
 
-# AGPL-3.0 section 13: each image carries the public URL of its own corresponding source.
-# docker/kerbwell-source.sh publishes the exact tree to the public mirror and checks the URL
-# answers 200 without sign-in before the image is built with it. A runtime BRAND_SOURCE_URL
-# still overrides it; leave that unset so the link always names the running build.
-ARG KERBWELL_SOURCE_URL=""
+LABEL au.com.kerbwell.unpublished="true"
+
+WORKDIR /app/apps/remix
+
+CMD ["sh", "start.sh"]
+
+
+###########################
+#   SOURCE GATE (AGPL)    #
+###########################
+# AGPL-3.0 section 13: every shipped image carries the public URL of its own corresponding
+# source. docker/kerbwell-source.sh publishes the exact tree to the public mirror first; this
+# stage then refuses the build unless KERBWELL_SOURCE_URL is a mirror snapshot tag
+# (https://github.com/blackshard-hq/kerbwell-sign-source/tree/src-<12 hex>) that answers 200
+# to an anonymous request. An empty value, a private commit or an unpublished tag fails here,
+# whichever route builds the image.
+FROM base AS source-gate
+
+ARG KERBWELL_SOURCE_URL
+# Retries 5 s apart, for GitHub's short lag after a push.
+ARG KERBWELL_SOURCE_ATTEMPTS=6
+COPY ./docker/kerbwell-source-gate.mjs /kerbwell-source-gate.mjs
+RUN node /kerbwell-source-gate.mjs "${KERBWELL_SOURCE_URL}" \
+  && printf '%s\n' "${KERBWELL_SOURCE_URL}" > /kerbwell-source-url
+
+
+###########################
+#   RUNNER (DEFAULT)      #
+###########################
+FROM unpublished AS runner
+
+ARG KERBWELL_SOURCE_URL
 ARG KERBWELL_SOURCE_REVISION=""
+# The copy ties this stage to the gate, so the gate runs on every build of the default target,
+# BuildKit or not. The value must match the one the gate passed.
+COPY --from=source-gate --chown=nodejs:nodejs /kerbwell-source-url /app/kerbwell-source-url
+RUN test "$(cat /app/kerbwell-source-url)" = "${KERBWELL_SOURCE_URL}"
+
+# A runtime BRAND_SOURCE_URL still overrides this; leave it unset so the link names the build.
 ENV BRAND_SOURCE_URL=${KERBWELL_SOURCE_URL}
 LABEL org.opencontainers.image.source="https://github.com/blackshard-hq/kerbwell-sign" \
       org.opencontainers.image.revision="${KERBWELL_SOURCE_REVISION}" \
       org.opencontainers.image.licenses="AGPL-3.0-only" \
-      au.com.kerbwell.source-url="${KERBWELL_SOURCE_URL}"
+      au.com.kerbwell.source-url="${KERBWELL_SOURCE_URL}" \
+      au.com.kerbwell.unpublished="false"
 
 WORKDIR /app/apps/remix
 
