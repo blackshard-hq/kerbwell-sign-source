@@ -6,6 +6,7 @@ import {
   KERBWELL_DISCLOSURE_SECTIONS,
   KERBWELL_DISCLOSURE_SHA256,
   KERBWELL_DISCLOSURE_VERSION,
+  KERBWELL_SIGN_AGREEMENT_LINE,
   kerbwellDisclosureCanonicalText,
 } from './kerbwell-disclosure';
 
@@ -48,6 +49,22 @@ describe('kerbwell disclosure', () => {
     expect(text).not.toContain('—');
     expect(KERBWELL_DISCLOSURE_SECTIONS.map((s) => s.heading)).toEqual(
       expect.arrayContaining(['Paper instead', 'Withdrawing consent']),
+    );
+  });
+
+  it('says the typed name is pre-filled and adopted only on a tap, matching the signing dialog', () => {
+    const howYouSign = KERBWELL_DISCLOSURE_SECTIONS.find((s) => s.heading === 'How you sign');
+    const text = (howYouSign?.paragraphs ?? []).join(' ');
+
+    // The dialog opens on Type with the gate legal name filled in, and the button reads Adopt signature.
+    expect(text).toMatch(/typed signature is pre-filled with the legal name/);
+    expect(text).toContain('adopted only when you tap Adopt signature');
+    expect(text).toContain('You can draw your signature instead');
+    expect(text).toContain('no box is ticked for you');
+    expect(text).not.toMatch(/nothing is filled in/i);
+    expect(text).toContain('By tapping Sign agreement you sign the document and agree to be bound by it.');
+    expect(KERBWELL_SIGN_AGREEMENT_LINE).toBe(
+      'By tapping Sign agreement I sign this document and agree to be bound by it.',
     );
   });
 });

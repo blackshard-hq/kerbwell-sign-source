@@ -142,7 +142,7 @@ describe('openKerbwellGateSession', () => {
       reauthentication: false,
     });
     expect(consent?.data).toMatchObject({
-      consentVersion: 'au-eta-2026-11-v1',
+      consentVersion: 'au-eta-2026-11-v2',
       consentHash: KERBWELL_DISCLOSURE_SHA256,
     });
 
@@ -168,6 +168,11 @@ describe('openKerbwellGateSession', () => {
   it('refuses consent to any wording other than the disclosure shown, and writes nothing', async () => {
     const cases = [
       { consent_version: 'au-eta-2026-10-v0' },
+      // v1 said nothing was pre-filled; the typed name is, so v1 consent is to wording no longer shown.
+      {
+        consent_version: 'au-eta-2026-11-v1',
+        consent_hash: '6c88c0f94961efa16aeab384fae07714a1f95b78ab689fdeb1908ebf999ecb98',
+      },
       { consent_hash: 'b'.repeat(64) },
       { consent_version: 'au-eta-2026-10-v0', consent_hash: 'b'.repeat(64) },
       { consent_hash: KERBWELL_DISCLOSURE_SHA256.toUpperCase() },

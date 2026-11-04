@@ -129,7 +129,7 @@ test.describe('kerbwell gate', () => {
       cfCity: 'Brisbane',
     });
     expect(logs.find((l) => l.type === 'KERBWELL_CONSENT_GIVEN')?.data).toMatchObject({
-      consentVersion: 'au-eta-2026-11-v1',
+      consentVersion: 'au-eta-2026-11-v2',
     });
   });
 

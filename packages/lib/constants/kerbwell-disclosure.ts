@@ -12,7 +12,7 @@
  * Plain strings, not translation macros: the signed-off wording is the English text itself.
  */
 
-export const KERBWELL_DISCLOSURE_VERSION = 'au-eta-2026-11-v1';
+export const KERBWELL_DISCLOSURE_VERSION = 'au-eta-2026-11-v2';
 
 export const KERBWELL_DISCLOSURE_EFFECTIVE = '4 November 2026';
 
@@ -64,7 +64,8 @@ export const KERBWELL_DISCLOSURE_SECTIONS: KerbwellDisclosureSection[] = [
   {
     heading: 'How you sign',
     paragraphs: [
-      'Each signature and each initial is a separate tap, and nothing is filled in or ticked for you. Your signature is adopted when you tap Sign agreement. By tapping Sign agreement you sign the document and agree to be bound by it.',
+      'Your typed signature is pre-filled with the legal name the sender holds for you, so you can check it before you use it. You can draw your signature instead. The signature is adopted only when you tap Adopt signature.',
+      'Each signature and each initial is placed only when you tap it, and no box is ticked for you. By tapping Sign agreement you sign the document and agree to be bound by it.',
     ],
   },
   {
@@ -120,7 +121,7 @@ export const kerbwellDisclosureCanonicalText = () =>
     ]),
   ].join('\n');
 
-export const KERBWELL_DISCLOSURE_SHA256 = '6c88c0f94961efa16aeab384fae07714a1f95b78ab689fdeb1908ebf999ecb98';
+export const KERBWELL_DISCLOSURE_SHA256 = 'd9d2a8d9d1de6b4cf0c14af017ec414cfcaa1dec632b2aaf591bdb396270c67e';
 
 /** The short line shown beside the final Sign agreement button. */
 export const KERBWELL_SIGN_AGREEMENT_LINE =

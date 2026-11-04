@@ -38,7 +38,7 @@ run from `/app/apps/remix` against the same Postgres database.
 | `NEXT_PRIVATE_KERBWELL_GATE_ISSUER` | `https://auth.kerbwell.com.au`. Turns the Kerbwell gate on (see "Kerbwell gate" below). Unset, the gate is off and a token opens its document, as upstream | no |
 | `NEXT_PRIVATE_KERBWELL_GATE_MODE` | unset (`all`): every recipient needs the gate. `recipient` gates only recipients whose access or action auth names `KERBWELL_GATE`; `off` turns it off | no |
 | `NEXT_PRIVATE_KERBWELL_GATE_JWKS_URL`, `_AUDIENCE`, `_REAUTH_URL`, `_MAX_AUTH_AGE` | unset: `<issuer>/jwks`, `sign`, `<issuer>/signer`, `900`. The JWKS and re-auth URLs must be on the issuer's origin; the age is 60 to 900 seconds | no |
-| `NEXT_PRIVATE_KERBWELL_GATE_ACTIONS_URL` | the portal page behind "Something wrong?", e.g. `https://vendor.kerbwell.com.au/s/actions` (see "Signer UI" below). Unset: Ask the agent mails the agent, and Decline, Wrong person and Request paper use the fork's own decline with the reason filled in | no |
+| `NEXT_PRIVATE_KERBWELL_GATE_ACTIONS_URL` | the portal page behind "Something wrong?", e.g. `https://vendor.kerbwell.com.au/s/actions` (see "Signer UI" below). Unset: Ask the agent mails the agent, Decline uses the fork's own decline, and Wrong person and Request paper show a notice that signing is paused, without declining | no |
 | `NEXT_PRIVATE_KERBWELL_GATE_PASSKEY_URL` | unset: `<issuer>/signer/passkey`, the passkey offer on the done page. Must be on the issuer origin | no |
 | `NEXT_PRIVATE_CSP_SIGN_FRAME_ANCESTORS` | `https://client.kerbwell.com.au`: the only site that may frame `/sign` and `/d` (with `'self'`). With the gate on and this unset, they can be framed by this origin only | no |
 | `NEXT_PUBLIC_KERBWELL_ADMIN_OIDC_ONLY` | `true`: the admin UI is reached only by OIDC against Kerbwell Identity, for the `kerbwell-sign-admin` role with a passkey amr (see "Admin sign-in" below) | no |
@@ -159,9 +159,9 @@ on a given consent version and hash.
 
 ### The consent wording
 
-`consent_version` must be `au-eta-2026-11-v1` and `consent_hash` the SHA-256 (hex) of
+`consent_version` must be `au-eta-2026-11-v2` and `consent_hash` the SHA-256 (hex) of
 `kerbwellDisclosureCanonicalText()` as UTF-8, today
-`6c88c0f94961efa16aeab384fae07714a1f95b78ab689fdeb1908ebf999ecb98`. Both live in
+`d9d2a8d9d1de6b4cf0c14af017ec414cfcaa1dec632b2aaf591bdb396270c67e`. Both live in
 `packages/lib/constants/kerbwell-disclosure.ts`, which is also the text of
 `/articles/signature-disclosure`. The gate's consent screen shows the same wording. A change to
 the wording is a new version and a new hash; the unit test fails until the constant, the version
@@ -171,6 +171,11 @@ The fork enforces this: an assertion whose `consent_version` or `consent_hash` d
 constant is refused at `/api/kerbwell/gate` (reason `consent`, the signer lands on the retry page)
 before anything is written, so the audit trail never records consent to wording this build does
 not show. Deploy the gate's new wording and the fork's new constant together.
+
+Versions: `au-eta-2026-11-v1` said nothing was filled in for the signer, which the typed signature
+pre-filled from the legal name contradicted; it was never deployed, and the fork now refuses it.
+`au-eta-2026-11-v2` says the typed signature is pre-filled with the legal name the sender holds,
+that drawing is an option, and that the signature is adopted only on Adopt signature.
 
 ### Signer UI
 
