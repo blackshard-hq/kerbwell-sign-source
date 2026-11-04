@@ -50,8 +50,9 @@ before(async () => {
   ({ prisma } = await import(pathToFileURL(join(SERVER_ROOT, 'packages/prisma/index.js')).href));
   bootstrap = await import(pathToFileURL(join(HERE, 'kerbwell-bootstrap.mjs')).href);
 
-  const users = await prisma.user.count();
-  assert.equal(users, 0, 'the test needs a fresh database (no users)');
+  // Migrations seed the upstream service accounts, so "fresh" means nothing of ours yet.
+  assert.equal(await prisma.organisation.count({ where: { url: 'kerbwell' } }), 0, 'needs a fresh database');
+  assert.equal(await prisma.webhook.count(), 0, 'needs a fresh database');
 });
 
 after(async () => {

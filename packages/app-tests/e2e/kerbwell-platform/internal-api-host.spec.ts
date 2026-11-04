@@ -8,21 +8,32 @@
  *   NEXT_PRIVATE_INTERNAL_API_HOSTS=127.0.0.1 (server)
  *   KERBWELL_E2E_INTERNAL_URL=http://127.0.0.1:3000 KERBWELL_E2E_PUBLIC_URL=http://localhost:3000
  *
+ * KERBWELL_E2E_API_TOKEN, when set, is a team API token already on the server (for example one
+ * kerbwell-bootstrap.mjs stored); otherwise the spec seeds a user, team and token itself.
+ *
  * Skipped when KERBWELL_E2E_INTERNAL_URL is unset (the upstream suite runs with the lock off).
  */
 import { NEXT_PUBLIC_WEBAPP_URL } from '@documenso/lib/constants/app';
 import { expect, test } from '@playwright/test';
 
-import { apiCreateTestContext } from '../fixtures/api-seeds';
-
 const INTERNAL_URL = process.env.KERBWELL_E2E_INTERNAL_URL;
 const PUBLIC_URL = process.env.KERBWELL_E2E_PUBLIC_URL || NEXT_PUBLIC_WEBAPP_URL();
+
+const apiToken = async (): Promise<string> => {
+  if (process.env.KERBWELL_E2E_API_TOKEN) {
+    return process.env.KERBWELL_E2E_API_TOKEN;
+  }
+
+  const { apiCreateTestContext } = await import('../fixtures/api-seeds');
+
+  return (await apiCreateTestContext('kerbwell-host-lock')).token;
+};
 
 test.describe('kerbwell internal API host', () => {
   test.skip(!INTERNAL_URL, 'KERBWELL_E2E_INTERNAL_URL is not set');
 
   test('a public-host GET to /api/v2/envelope returns 404, even with a valid token', async ({ request }) => {
-    const { token } = await apiCreateTestContext('kerbwell-host-lock');
+    const token = await apiToken();
 
     const res = await request.get(`${PUBLIC_URL}/api/v2/envelope`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -37,7 +48,7 @@ test.describe('kerbwell internal API host', () => {
   });
 
   test('an internal-host request with a valid token returns 200', async ({ request }) => {
-    const { token } = await apiCreateTestContext('kerbwell-host-lock');
+    const token = await apiToken();
 
     const res = await request.get(`${INTERNAL_URL}/api/v2/envelope`, {
       headers: { Authorization: `Bearer ${token}` },

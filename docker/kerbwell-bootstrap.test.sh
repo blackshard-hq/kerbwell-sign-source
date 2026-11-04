@@ -6,35 +6,36 @@
 # test passes. Containers are named scratch-kw-boot-*; the database password is random and
 # passed through the environment, never on a command line.
 #
-#   DOCKER (default docker) runs the docker CLI, so builder-01 can route it through its broker.
+#   DOCKER (default docker) runs the docker CLI; on builder-01 use DOCKER="bs-dock scratch".
+#   PG_IMAGE (default postgres:16-alpine) is the throwaway database image.
 set -euo pipefail
 
 IMAGE="${1:?usage: kerbwell-bootstrap.test.sh IMAGE}"
 DOCKER="${DOCKER:-docker}"
+PG_IMAGE="${PG_IMAGE:-postgres:16-alpine}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 RUN="scratch-kw-boot-$$"
-NET="scratch-kw-boot-net-$$"
 
 PGPW="$(head -c 18 /dev/urandom | base64 | tr -dc 'A-Za-z0-9')"
 export POSTGRES_PASSWORD="$PGPW"
-export NEXT_PRIVATE_DATABASE_URL="postgres://postgres:${PGPW}@${RUN}-db:5432/postgres"
-export NEXT_PRIVATE_DIRECT_DATABASE_URL="$NEXT_PRIVATE_DATABASE_URL"
 
 cleanup() {
   $DOCKER rm -f "${RUN}-db" >/dev/null 2>&1 || true
-  $DOCKER network rm "$NET" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
-$DOCKER network create "$NET" >/dev/null
-$DOCKER run -d --name "${RUN}-db" --network "$NET" -e POSTGRES_PASSWORD postgres:15-alpine >/dev/null
+$DOCKER run -d --name "${RUN}-db" -e POSTGRES_PASSWORD "$PG_IMAGE" >/dev/null
+# The default bridge, by address: no custom network is needed.
+DBIP="$($DOCKER inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${RUN}-db")"
+export NEXT_PRIVATE_DATABASE_URL="postgres://postgres:${PGPW}@${DBIP}:5432/postgres"
+export NEXT_PRIVATE_DIRECT_DATABASE_URL="$NEXT_PRIVATE_DATABASE_URL"
 
 for _ in $(seq 1 60); do
   if $DOCKER exec "${RUN}-db" pg_isready -U postgres -q 2>/dev/null; then break; fi
   sleep 1
 done
 
-$DOCKER run --rm --network "$NET" \
+$DOCKER run --rm --name "${RUN}-job" \
   -e NEXT_PRIVATE_DATABASE_URL -e NEXT_PRIVATE_DIRECT_DATABASE_URL \
   -v "$HERE/kerbwell-bootstrap.test.mjs:/app/apps/remix/kerbwell-bootstrap.test.mjs:ro" \
   --entrypoint sh "$IMAGE" -c 'node prisma-migrate-deploy.mjs --schema ../../packages/prisma/schema.prisma >/dev/null && node --test kerbwell-bootstrap.test.mjs'
