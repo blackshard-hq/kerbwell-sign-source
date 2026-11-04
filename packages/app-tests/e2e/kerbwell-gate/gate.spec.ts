@@ -129,7 +129,7 @@ test.describe('kerbwell gate', () => {
       cfCity: 'Brisbane',
     });
     expect(logs.find((l) => l.type === 'KERBWELL_CONSENT_GIVEN')?.data).toMatchObject({
-      consentVersion: 'au-eta-e2e-pending-legal',
+      consentVersion: 'au-eta-2026-11-v1',
     });
   });
 
@@ -188,7 +188,9 @@ test.describe('kerbwell gate', () => {
     expect((await second.context().cookies()).some((c) => c.name === '__Host-kw_gate')).toBe(false);
   });
 
-  test('an expired assertion, a wrong audience and a wrong envelope are refused', async ({ browser }) => {
+  test('an expired assertion, a wrong audience, a wrong envelope and stale consent are refused', async ({
+    browser,
+  }) => {
     const { envelopeId, recipients } = await seedEnvelope();
     const now = Math.floor(Date.now() / 1000);
 
@@ -196,6 +198,9 @@ test.describe('kerbwell gate', () => {
       await identity.mintAssertion({ recipientId: recipients[0].id, envelopeId, iat: now - 600, exp: now - 480 }),
       await identity.mintAssertion({ recipientId: recipients[0].id, envelopeId, audience: 'portal' }),
       await identity.mintAssertion({ recipientId: recipients[0].id, envelopeId: 'envelope_someone_else' }),
+      // Consent to wording other than the disclosure the fork shows.
+      await identity.mintAssertion({ recipientId: recipients[0].id, envelopeId, consentVersion: 'au-eta-2026-10-v0' }),
+      await identity.mintAssertion({ recipientId: recipients[0].id, envelopeId, consentHash: 'c'.repeat(64) }),
     ];
 
     for (const assertion of cases) {

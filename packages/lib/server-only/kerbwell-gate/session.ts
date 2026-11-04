@@ -4,6 +4,7 @@ import { prisma } from '@documenso/prisma';
 import type { KerbwellGateSession } from '@prisma/client';
 import { DocumentStatus, Prisma } from '@prisma/client';
 
+import { KERBWELL_DISCLOSURE_SHA256, KERBWELL_DISCLOSURE_VERSION } from '../../constants/kerbwell-disclosure';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '../../types/document-audit-logs';
 import type { RequestMetadata } from '../../universal/extract-request-metadata';
 import { createDocumentAuditLogData } from '../../utils/document-audit-logs';
@@ -19,7 +20,16 @@ export const KERBWELL_ACR_LABELS: Record<TKerbwellAcr, string> = {
   'kw-sign-l2': 'Level 2: one-time code and identity document match',
 };
 
-export type KerbwellGateRefusal = 'recipient' | 'envelope' | 'replay' | 'document';
+export type KerbwellGateRefusal = 'recipient' | 'envelope' | 'replay' | 'document' | 'consent';
+
+/**
+ * The consent the gate recorded must be to the disclosure this fork shows: the same version id
+ * and the SHA-256 of the same text. Anything else would put consent to unseen wording in the
+ * audit trail, so the assertion is refused.
+ */
+export const isCurrentKerbwellConsent = (
+  claims: Pick<TKerbwellSignerAssertionClaims, 'consent_version' | 'consent_hash'>,
+) => claims.consent_version === KERBWELL_DISCLOSURE_VERSION && claims.consent_hash === KERBWELL_DISCLOSURE_SHA256;
 
 export class KerbwellGateRefusedError extends Error {
   constructor(readonly reason: KerbwellGateRefusal) {
@@ -37,7 +47,8 @@ type OpenKerbwellGateSessionOptions = {
 /**
  * Turns a verified signer assertion into a gate session.
  *
- * The recipient (sub) must exist on the envelope the assertion names (env, by id or secondary
+ * The consent (consent_version, consent_hash) must be to the disclosure this fork shows
+ * (constants/kerbwell-disclosure.ts). The recipient (sub) must exist on the envelope the assertion names (env, by id or secondary
  * id), on a document that has been sent and not deleted. The jti is recorded first, in the same
  * transaction, so a second post of the same assertion is refused. Writes
  * KERBWELL_IDENTITY_VERIFIED every time and KERBWELL_CONSENT_GIVEN the first time this recipient
@@ -50,6 +61,10 @@ export const openKerbwellGateSession = async ({
   requestMetadata,
   now = new Date(),
 }: OpenKerbwellGateSessionOptions) => {
+  if (!isCurrentKerbwellConsent(claims)) {
+    throw new KerbwellGateRefusedError('consent');
+  }
+
   const recipientId = Number(claims.sub);
 
   const recipient = await prisma.recipient.findUnique({

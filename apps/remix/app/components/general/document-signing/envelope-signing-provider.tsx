@@ -8,6 +8,7 @@ import { isFieldUnsignedAndRequired, isRequiredField } from '@documenso/lib/util
 import { extractFieldInsertionValues } from '@documenso/lib/utils/envelope-signing';
 import { trpc } from '@documenso/trpc/react';
 import type { TSignEnvelopeFieldValue } from '@documenso/trpc/server/envelope-router/sign-envelope-field.types';
+import { drawnStrokesFor } from '@documenso/ui/primitives/signature-pad/drawn-strokes';
 import { EnvelopeType, type Field, FieldType, type Recipient, RecipientRole, SigningStatus } from '@prisma/client';
 import { DateTime } from 'luxon';
 import { createContext, useContext, useMemo, useState } from 'react';
@@ -335,6 +336,7 @@ export const EnvelopeSigningProvider = ({
       fieldId,
       fieldValue,
       authOptions,
+      kerbwellDrawn: fieldValue.type === FieldType.SIGNATURE ? drawnStrokesFor(fieldValue.value) : undefined,
     });
 
     return signedField;

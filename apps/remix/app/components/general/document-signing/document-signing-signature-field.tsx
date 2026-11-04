@@ -10,6 +10,7 @@ import type {
 import { Button } from '@documenso/ui/primitives/button';
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from '@documenso/ui/primitives/dialog';
 import { SignaturePad } from '@documenso/ui/primitives/signature-pad';
+import { drawnStrokesFor } from '@documenso/ui/primitives/signature-pad/drawn-strokes';
 import { useToast } from '@documenso/ui/primitives/use-toast';
 import { msg } from '@lingui/core/macro';
 import { useLingui } from '@lingui/react';
@@ -141,6 +142,7 @@ export const DocumentSigningSignatureField = ({
         value,
         isBase64: !isTypedSignature,
         authOptions,
+        kerbwellDrawn: isTypedSignature ? undefined : drawnStrokesFor(value),
       };
 
       if (onSignField) {

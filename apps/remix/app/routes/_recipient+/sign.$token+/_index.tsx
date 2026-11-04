@@ -377,10 +377,20 @@ const handleV2Loader = async ({ params, request }: Route.LoaderArgs) => {
 /**
  * Kerbwell: fetch the pdf.js worker (the largest download on the page) from the first byte of
  * HTML, alongside the page's own modules, instead of after they have run. Its URL is hashed and
- * served immutable, so pdf.js's own request for it is answered from the HTTP cache.
+ * served immutable, so pdf.js's own request for it is answered from the HTTP cache. Low priority:
+ * the first-page image (Link header from the gate guard) and the stylesheet are what the signer
+ * sees first, and on a phone connection the worker would otherwise share their bandwidth.
  */
 export function links() {
-  return [{ rel: 'preload', href: pdfjsWorkerUrl, as: 'fetch', crossOrigin: 'anonymous' as const }];
+  return [
+    {
+      rel: 'preload',
+      href: pdfjsWorkerUrl,
+      as: 'fetch',
+      crossOrigin: 'anonymous' as const,
+      fetchPriority: 'low' as const,
+    },
+  ];
 }
 
 export async function loader(loaderArgs: Route.LoaderArgs) {

@@ -35,6 +35,19 @@ const PHONE: BrowserContextOptions = {
     'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
 };
 
+/** A 1x1 PNG, standing in for any image a caller uploads. */
+const UPLOADED_IMAGE =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+
+const STROKE: Array<[number, number]> = [
+  [40, 120],
+  [80, 90],
+  [120, 130],
+  [160, 80],
+  [200, 140],
+  [240, 70],
+];
+
 const WCAG_22_AA = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
 test.describe.configure({ mode: 'serial' });
@@ -153,6 +166,152 @@ test.describe('kerbwell signer UI', () => {
     await expect(dialog.getByTestId('signature-pad-type-input')).toHaveValue(LEGAL_NAME);
   });
 
+  test('agency agreement: the server refuses an uploaded image sent straight to the sign endpoint', async ({
+    browser,
+  }) => {
+    const { page, recipient } = await openPhone(browser, { docKind: 'agency_agreement' });
+    const field = await prisma.field.findFirstOrThrow({
+      where: { recipientId: recipient.id, type: FieldType.SIGNATURE },
+    });
+
+    const sign = async (extra: Record<string, unknown>) =>
+      await page.request.post('/api/trpc/envelope.field.sign?batch=1', {
+        data: {
+          0: {
+            json: {
+              token: recipient.token,
+              fieldId: field.id,
+              fieldValue: { type: FieldType.SIGNATURE, value: UPLOADED_IMAGE },
+              ...extra,
+            },
+          },
+        },
+      });
+
+    // An image with no strokes, as an upload would arrive: refused, nothing stored.
+    const refused = await sign({});
+    expect(refused.status()).toBe(400);
+    expect(JSON.stringify(await refused.json())).toContain('KERBWELL_UPLOAD_REFUSED');
+    expect(await prisma.signature.count({ where: { fieldId: field.id } })).toBe(0);
+
+    // With the pad's strokes the server stores its own render of them, never the image sent.
+    const drawn = await sign({
+      kerbwellDrawn: { width: 600, height: 200, color: 'black', lines: [STROKE] },
+    });
+    expect(drawn.status()).toBe(200);
+
+    const stored = await prisma.signature.findFirstOrThrow({ where: { fieldId: field.id } });
+    expect(stored.signatureImageAsBase64).toMatch(/^data:image\/png;base64,/);
+    expect(stored.signatureImageAsBase64).not.toBe(UPLOADED_IMAGE);
+  });
+
+  test('agency agreement: a drawn signature is stored as the server render of its strokes', async ({ browser }) => {
+    const { page, recipient } = await openPhone(
+      browser,
+      { docKind: 'agency_agreement' },
+      { ...PHONE, hasTouch: false },
+    );
+
+    // The keyboard path opens the field (no touch screen in this context, so the mouse can draw).
+    await page.locator('[data-testid="kw-field-target"][data-field-type="SIGNATURE"]').first().focus();
+    await page.keyboard.press('Enter');
+
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('tab', { name: 'Draw' }).click();
+
+    const pad = dialog.getByTestId('signature-pad-draw');
+    const box = await pad.boundingBox();
+    expect(box).not.toBeNull();
+
+    if (!box) {
+      return;
+    }
+
+    await page.mouse.move(box.x + 30, box.y + box.height * 0.6);
+    await page.mouse.down();
+    for (let i = 1; i <= 12; i++) {
+      await page.mouse.move(box.x + 30 + i * 20, box.y + box.height * (i % 2 ? 0.3 : 0.7), { steps: 4 });
+    }
+    await page.mouse.up();
+
+    await dialog.getByRole('button', { name: 'Adopt signature' }).click();
+    await expect(dialog).toHaveCount(0);
+
+    const field = await prisma.field.findFirstOrThrow({
+      where: { recipientId: recipient.id, type: FieldType.SIGNATURE },
+      include: { signature: true },
+    });
+
+    await expect
+      .poll(async () => (await prisma.field.findUniqueOrThrow({ where: { id: field.id } })).inserted)
+      .toBe(true);
+
+    const signature = await prisma.signature.findFirstOrThrow({ where: { fieldId: field.id } });
+    expect(signature.signatureImageAsBase64).toMatch(/^data:image\/png;base64,/);
+    expect(signature.typedSignature).toBeNull();
+  });
+
+  test('general document: the server takes an uploaded image as it is', async ({ browser }) => {
+    const { page, recipient } = await openPhone(browser, { docKind: 'general_non_prescribed' });
+    const field = await prisma.field.findFirstOrThrow({
+      where: { recipientId: recipient.id, type: FieldType.SIGNATURE },
+    });
+
+    const res = await page.request.post('/api/trpc/envelope.field.sign?batch=1', {
+      data: {
+        0: {
+          json: {
+            token: recipient.token,
+            fieldId: field.id,
+            fieldValue: { type: FieldType.SIGNATURE, value: UPLOADED_IMAGE },
+          },
+        },
+      },
+    });
+    expect(res.status()).toBe(200);
+
+    const stored = await prisma.signature.findFirstOrThrow({ where: { fieldId: field.id } });
+    expect(stored.signatureImageAsBase64).toBe(UPLOADED_IMAGE);
+  });
+
+  test('the first page arrives as a server image in the HTML and is the largest paint', async ({ browser }) => {
+    const { page, recipient } = await openPhone(browser);
+
+    // The server-rendered HTML already holds the poster, so it does not wait for the bundle.
+    const pageResponse = await page.request.get(`/sign/${recipient.token}`);
+    const html = await pageResponse.text();
+    const posterPath = /src="([^"]*\/page-1\.webp)"/.exec(html)?.[1]?.replaceAll('&amp;', '&');
+    expect(posterPath).toBeTruthy();
+
+    // The response also names it in a preload header, ahead of the page's module preloads.
+    const link = /<([^>]+\/page-1\.webp)>; rel=preload; as=image; fetchpriority=high/.exec(
+      pageResponse.headers()['link'] ?? '',
+    );
+    expect(link).not.toBeNull();
+    expect(new URL(posterPath ?? '', APP_URL).pathname).toBe(link?.[1]);
+
+    const poster = await page.request.get(posterPath ?? '');
+    expect(poster.status()).toBe(200);
+    expect(poster.headers()['content-type']).toBe('image/webp');
+    expect(poster.headers()['cache-control']).toContain('private');
+
+    // Without the gate session the image is refused like the PDF beside it.
+    const stranger = await (await browser.newContext()).request.get(posterPath ?? '');
+    expect(stranger.status()).toBe(403);
+
+    const lcp = await page.evaluate(
+      async () =>
+        await new Promise<string>((resolve) => {
+          // The entry's url names the image even after the viewer has replaced the poster.
+          new PerformanceObserver((list) => {
+            const last = list.getEntries().at(-1) as PerformanceEntry & { url?: string };
+            resolve(last?.url ?? '');
+          }).observe({ type: 'largest-contentful-paint', buffered: true });
+        }),
+    );
+    expect(lcp).toMatch(/\/page-1\.webp$/);
+  });
+
   test('phone: 16px inputs, no zoom on focus, nothing wider than the screen at 320 px', async ({ browser }) => {
     const { page } = await openPhone(browser);
 
@@ -238,7 +397,7 @@ test.describe('kerbwell signer UI', () => {
   });
 
   test('Something wrong? is on screen with the gate actions', async ({ browser }) => {
-    const { page } = await openPhone(browser, { agentEmail: 'agent@blackshard.com.au' });
+    const { page, envelopeId } = await openPhone(browser, { agentEmail: 'agent@blackshard.com.au' });
 
     await expect(page.getByTestId('kw-something-wrong')).toBeVisible();
     await page.getByTestId('kw-something-wrong').click();
@@ -252,9 +411,48 @@ test.describe('kerbwell signer UI', () => {
     await expect(dialog.getByRole('button', { name: 'I am the wrong person' })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Request paper' })).toBeVisible();
 
-    // Request paper opens the decline with the reason filled in; nothing is sent until confirmed.
+    // Request paper pauses: it explains that nothing is signed and offers a prefilled email. It
+    // never opens the decline, so the envelope stays open (the disclosure's "Paper instead").
     await dialog.getByRole('button', { name: 'Request paper' }).click();
-    await expect(page.getByRole('dialog').getByRole('textbox', { name: 'Reason' })).toHaveValue(/Paper requested/);
+    const paper = page.getByTestId('kw-pause-paper');
+    await expect(paper).toContainText('Electronic signing is paused for you.');
+    await expect(paper.getByRole('link', { name: 'Email the agent' })).toHaveAttribute(
+      'href',
+      /^mailto:agent@blackshard\.com\.au\?subject=Paper%20copy%20requested/,
+    );
+    await expect(page.getByRole('textbox', { name: 'Reason' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(paper).toHaveCount(0);
+
+    // Wrong person does not decline for the right person either.
+    if (!(await page.getByRole('button', { name: 'I am the wrong person' }).isVisible())) {
+      await page.getByTestId('kw-something-wrong').click();
+    }
+    await page.getByRole('button', { name: 'I am the wrong person' }).click();
+    const wrong = page.getByTestId('kw-pause-wrong-person');
+    await expect(wrong).toContainText('Do not sign this document.');
+    await expect(wrong.getByRole('link', { name: 'Email the agent' })).toHaveAttribute(
+      'href',
+      /^mailto:agent@blackshard\.com\.au\?subject=Wrong%20person/,
+    );
+    await expect(page.getByRole('textbox', { name: 'Reason' })).toHaveCount(0);
+
+    const envelope = await prisma.envelope.findUniqueOrThrow({ where: { id: envelopeId } });
+    expect(envelope.status).toBe(DocumentStatus.PENDING);
+  });
+
+  test('Request paper without an agent email still pauses and names who to contact', async ({ browser }) => {
+    const { page, envelopeId } = await openPhone(browser);
+
+    await page.getByTestId('kw-something-wrong').click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Request paper' }).click();
+
+    const paper = page.getByTestId('kw-pause-paper');
+    await expect(paper).toContainText('Contact the agent who sent you this document.');
+    await expect(paper.getByRole('link')).toHaveCount(0);
+
+    const envelope = await prisma.envelope.findUniqueOrThrow({ where: { id: envelopeId } });
+    expect(envelope.status).toBe(DocumentStatus.PENDING);
   });
 
   test('an internal signer completes in four taps, and the done page offers the copy and a passkey', async ({

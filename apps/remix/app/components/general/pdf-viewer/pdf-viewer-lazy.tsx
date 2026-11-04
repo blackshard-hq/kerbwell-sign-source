@@ -10,7 +10,7 @@ import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker?url';
 import { lazy, Suspense, useEffect, useState } from 'react';
 
 import type { PDFViewerProps } from './pdf-viewer';
-import { PdfViewerLoadingState } from './pdf-viewer-states';
+import { PdfViewerLoadingState, PdfViewerPoster } from './pdf-viewer-states';
 
 const loadPdfViewer = async () => import('./pdf-viewer');
 
@@ -37,7 +37,7 @@ export default function PDFViewerLazy(props: PDFViewerProps) {
 
   const fallback = (
     <div className={cn('h-full w-full', props.className)}>
-      <PdfViewerLoadingState />
+      {props.posterUrl ? <PdfViewerPoster src={props.posterUrl} /> : <PdfViewerLoadingState />}
     </div>
   );
 

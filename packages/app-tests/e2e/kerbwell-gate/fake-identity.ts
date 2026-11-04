@@ -13,6 +13,7 @@
 import { randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 
+import { KERBWELL_DISCLOSURE_SHA256, KERBWELL_DISCLOSURE_VERSION } from '@documenso/lib/constants/kerbwell-disclosure';
 import { exportJWK, generateKeyPair, type JWK, SignJWT } from 'jose';
 
 export const GATE_ISSUER = (process.env.KERBWELL_E2E_GATE_ISSUER || 'http://127.0.0.1:4455').replace(/\/+$/, '');
@@ -33,6 +34,8 @@ export type AssertionInput = {
   idvRef?: string | null;
   audience?: string;
   mode?: 'remote' | 'in_person';
+  consentVersion?: string;
+  consentHash?: string;
 };
 
 /**
@@ -110,8 +113,8 @@ export class FakeKerbwellIdentity {
       auth_time: input.authTime ?? now,
       acr: input.acr ?? 'kw-sign-l1',
       amr: input.amr ?? ['otp_sms'],
-      consent_version: 'au-eta-e2e-pending-legal',
-      consent_hash: 'c'.repeat(64),
+      consent_version: input.consentVersion ?? KERBWELL_DISCLOSURE_VERSION,
+      consent_hash: input.consentHash ?? KERBWELL_DISCLOSURE_SHA256,
       idv_ref: input.idvRef ?? null,
       legal_name: input.legalName ?? 'Jordan Example Citizen',
       doc_kind: input.docKind ?? 'agency_agreement',

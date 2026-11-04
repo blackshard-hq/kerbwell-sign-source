@@ -7,7 +7,7 @@ globalThis.Path2D = Path2D;
 // @ts-expect-error napi-rs/canvas satisfies the requirements
 globalThis.Image = Image;
 
-class SkiaCanvasFactory {
+export class SkiaCanvasFactory {
   _createCanvas(width: number, height: number) {
     const canvas = new Canvas(width, height);
     canvas.gpu = false;

@@ -1,8 +1,10 @@
 import {
   checkKerbwellGateForToken,
   getKerbwellGateConfig,
+  getKerbwellPosterPreloadPath,
   KerbwellAssertionError,
   KerbwellGateRefusedError,
+  kerbwellPosterLinkHeader,
   openKerbwellGateSession,
   runWithKerbwellGateRequest,
   serializeKerbwellGateCookie,
@@ -112,6 +114,7 @@ type GuardedSurface = {
   isPage: boolean;
 };
 
+const SIGN_INDEX_PATH_REGEX = /^\/sign\/[^/.]+\/?$/;
 const SIGN_PATH_REGEX = /^\/sign\/([^/]+?)(\.data)?(?:\/([^/]+?)(\.data)?)?\/?$/;
 const EMBED_SIGN_PATH_REGEX = /^\/embed\/sign\/([^/]+?)(\.data)?\/?$/;
 const REPORT_PATH_REGEX = /^\/report\/([^/]+?)(\.data)?\/?$/;
@@ -220,6 +223,23 @@ export const kerbwellGatePageGuard = createMiddleware<HonoEnv>(async (c, next) =
 
   if (check.status === 'refused') {
     return refuse();
+  }
+
+  // The signing page: tell the browser about the first-page image before it reads the HTML, so
+  // the page's largest paint does not queue behind the page's scripts (or rides a 103 Early Hint
+  // where the edge sends one).
+  if (check.status === 'allowed' && c.req.method === 'GET' && SIGN_INDEX_PATH_REGEX.test(c.req.path)) {
+    await next();
+
+    if (c.res.status === 200 && c.res.headers.get('content-type')?.startsWith('text/html')) {
+      const poster = await getKerbwellPosterPreloadPath(check.recipientId, surface.token).catch(() => null);
+
+      if (poster) {
+        c.res.headers.append('Link', kerbwellPosterLinkHeader(poster));
+      }
+    }
+
+    return;
   }
 
   return next();

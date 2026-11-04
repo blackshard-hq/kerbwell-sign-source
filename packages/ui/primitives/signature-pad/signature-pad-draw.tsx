@@ -9,6 +9,7 @@ import type { MouseEvent, PointerEvent, RefObject, TouchEvent } from 'react';
 import { useMemo, useRef, useState } from 'react';
 
 import { cn } from '../../lib/utils';
+import { rememberDrawnStrokes, toDrawnStrokes } from './drawn-strokes';
 import { getSvgPathFromStroke } from './helper';
 import { Point } from './point';
 import { SignaturePadColorPicker } from './signature-pad-color-picker';
@@ -73,6 +74,27 @@ export const SignaturePadDraw = ({ className, value, onChange, ...props }: Signa
       },
     } satisfies StrokeOptions;
   }, []);
+
+  /**
+   * Kerbwell: emits the canvas image and remembers the strokes behind it, for the server-side
+   * render on agency agreements. Only when the strokes are the whole image: over a preloaded image
+   * they are not, so nothing is remembered.
+   */
+  const emitImage = (newLines: Point[][]) => {
+    if (!$el.current) {
+      return;
+    }
+
+    const image = $el.current.toDataURL();
+
+    const drawn = $imageData.current ? null : toDrawnStrokes($el.current, selectedColor, newLines);
+
+    if (drawn && drawn.lines.length > 0) {
+      rememberDrawnStrokes(image, drawn);
+    }
+
+    onChange?.(image);
+  };
 
   const onMouseDown = (event: MouseEvent | PointerEvent | TouchEvent) => {
     if (event.cancelable) {
@@ -161,7 +183,7 @@ export const SignaturePadDraw = ({ className, value, onChange, ...props }: Signa
         setIsSignatureValid(isValidSignature);
 
         if (isValidSignature) {
-          onChange?.($el.current.toDataURL());
+          emitImage(newLines);
         }
         ctx.save();
       }
@@ -231,7 +253,7 @@ export const SignaturePadDraw = ({ className, value, onChange, ...props }: Signa
       ctx?.fill(pathData);
     });
 
-    onChange?.($el.current.toDataURL());
+    emitImage(newLines);
   };
 
   unsafe_useEffectOnce(() => {

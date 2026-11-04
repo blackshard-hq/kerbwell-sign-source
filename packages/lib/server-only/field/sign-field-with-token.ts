@@ -26,6 +26,7 @@ import type { RequestMetadata } from '../../universal/extract-request-metadata';
 import { createDocumentAuditLogData } from '../../utils/document-audit-logs';
 import { assertRecipientNotExpired } from '../../utils/recipients';
 import { validateFieldAuth } from '../document/validate-field-auth';
+import { resolveKerbwellSignatureImage } from '../kerbwell-gate/drawn-signature';
 
 export type SignFieldWithTokenOptions = {
   token: string;
@@ -35,6 +36,8 @@ export type SignFieldWithTokenOptions = {
   userId?: number;
   authOptions?: TRecipientActionAuth;
   requestMetadata?: RequestMetadata;
+  /** Kerbwell: the strokes of a drawn signature image (types/kerbwell-drawn-signature.ts). */
+  kerbwellDrawn?: unknown;
 };
 
 /**
@@ -55,6 +58,7 @@ export const signFieldWithToken = async ({
   userId,
   authOptions,
   requestMetadata,
+  kerbwellDrawn,
 }: SignFieldWithTokenOptions) => {
   const recipient = await prisma.recipient.findFirstOrThrow({
     where: {
@@ -191,7 +195,15 @@ export const signFieldWithToken = async ({
 
   let customText = !isSignatureField ? value : undefined;
 
-  const signatureImageAsBase64 = isSignatureField && isBase64 ? value : undefined;
+  const signatureImageAsBase64 =
+    isSignatureField && isBase64
+      ? await resolveKerbwellSignatureImage({
+          recipientId: recipient.id,
+          value,
+          drawn: kerbwellDrawn,
+          isImage: true,
+        })
+      : undefined;
   const typedSignature = isSignatureField && !isBase64 ? value : undefined;
 
   if (field.type === FieldType.DATE) {

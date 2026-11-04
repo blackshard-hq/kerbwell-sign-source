@@ -167,6 +167,11 @@ on a given consent version and hash.
 the wording is a new version and a new hash; the unit test fails until the constant, the version
 and the hash agree.
 
+The fork enforces this: an assertion whose `consent_version` or `consent_hash` differs from the
+constant is refused at `/api/kerbwell/gate` (reason `consent`, the signer lands on the retry page)
+before anything is written, so the audit trail never records consent to wording this build does
+not show. Deploy the gate's new wording and the fork's new constant together.
+
 ### Signer UI
 
 Behind a gate session the signing page:
@@ -174,16 +179,23 @@ Behind a gate session the signing page:
 - opens the signature dialog on Type, filled with `legal_name` in the signature font, so it is
   adopted with one tap ("Adopt signature"); Draw is an equal tab. Upload is never offered when
   `doc_kind` is `agency_agreement`: the loader turns `uploadSignatureEnabled` off for that
-  recipient whatever the document settings say. Dispatch should also send agency agreements with
-  `uploadSignatureEnabled: false`, because a drawn and an uploaded signature are both images and
-  the server cannot tell them apart.
+  recipient whatever the document settings say. The server enforces it too. A drawn and an
+  uploaded signature are both canvas PNGs, so on an agency agreement the server does not store
+  the browser's image: the draw pad sends its pen strokes beside it (`kerbwellDrawn` on
+  `envelope.field.sign` and `field.signFieldWithToken`), and the server renders the stored PNG
+  from them. An image with no strokes is refused (`KERBWELL_UPLOAD_REFUSED`, 400) unless it is a
+  signature the server already rendered for that recipient. Dispatch should still send agency
+  agreements with `uploadSignatureEnabled: false`.
 - never bulk-signs fields (the upstream auto-sign dialog is off), so every signature and initial
   is its own tap. The final button reads "Sign agreement" beside "By tapping Sign agreement I sign
   this document and agree to be bound by it."
 - shows "Something wrong?" (the sidebar on a desktop, a button in the bottom bar on a phone). With
   `NEXT_PRIVATE_KERBWELL_GATE_ACTIONS_URL` set, each action links to
   `<actions url>?action=<ask|decline|wrong-person|paper>&recipient=<id>&envelope=<id>`; the
-  portal maps that to its gate record and confirms with the signer there.
+  portal maps that to its gate record and confirms with the signer there. Without it, Ask the
+  agent mails the envelope's reply-to and Decline uses the fork's own decline. Request paper and
+  Wrong person never decline the document (the disclosure says asking for paper pauses signing for
+  that signer): they say nothing is signed and offer a prefilled email to the agent.
 - gives every field on the canvas a focusable button over its box, so Next field moves focus to
   the field and Enter or Space fills it (no drag, no pointer).
 - ends on a done page that says the executed PDF is emailed when everyone has signed, offers the
@@ -193,8 +205,19 @@ Behind a gate session the signing page:
 Phone speed: the build writes brotli and gzip copies of every client asset
 (`apps/remix/.bin/precompress.mjs`) and `server/main.js` serves them (`precompressed: true`), so
 the signing page is about 1.3 MB on the wire instead of 4.9 MB while nothing in front of the app
-compresses. The signing route preloads the pdf.js worker from its first byte of HTML, and the
-viewer chunk starts downloading as soon as the page's modules run.
+compresses. The signing page's largest paint is the first page of the document, so it no longer
+waits for the JavaScript:
+
+- `GET /api/files/token/<token>/envelope/<id>/envelopeItem/<id>/dataId/<id>/<version>/page-1.webp`
+  returns the first page as an 800 px WebP (about 35 to 55 KB), rendered on the server with pdf.js
+  and skia-canvas and kept in memory by a hash of the stored PDF. Access is the same as `item.pdf`
+  beside it, so under the gate it needs the recipient's gate session; `qr_` tokens get none.
+- The viewer shows it in the server-rendered HTML (`PdfViewerPoster`) until pdf.js has drawn the
+  page, and the gate guard adds `Link: <poster>; rel=preload; as=image; fetchpriority=high` to the
+  `/sign/<token>` response, so the browser requests it right after the document. An edge that
+  turns Link headers into 103 Early Hints sends it even sooner.
+- The pdf.js worker is preloaded at low priority, and the viewer chunk starts downloading as soon
+  as the page's modules run.
 
 `packages/app-tests/e2e/kerbwell-signer-ui` checks this on a phone viewport, including an axe
 WCAG 2.2 AA run on the signing page and the signature dialog.

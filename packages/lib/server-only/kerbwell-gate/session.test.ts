@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { KERBWELL_DISCLOSURE_SHA256, KERBWELL_DISCLOSURE_VERSION } from '../../constants/kerbwell-disclosure';
 import { ZDocumentAuditLogSchema } from '../../types/document-audit-logs';
 import type { TKerbwellSignerAssertionClaims } from './claims';
 
@@ -81,8 +82,8 @@ const claims = (over: Partial<TKerbwellSignerAssertionClaims> = {}): TKerbwellSi
   auth_time: NOW_S - 30,
   acr: 'kw-sign-l1',
   amr: ['otp_sms'],
-  consent_version: 'au-eta-2026-11-pending-legal',
-  consent_hash: 'b'.repeat(64),
+  consent_version: KERBWELL_DISCLOSURE_VERSION,
+  consent_hash: KERBWELL_DISCLOSURE_SHA256,
   idv_ref: 'frankie-ref-123',
   legal_name: 'Jordan Example Citizen',
   doc_kind: 'agency_agreement',
@@ -141,8 +142,8 @@ describe('openKerbwellGateSession', () => {
       reauthentication: false,
     });
     expect(consent?.data).toMatchObject({
-      consentVersion: 'au-eta-2026-11-pending-legal',
-      consentHash: 'b'.repeat(64),
+      consentVersion: 'au-eta-2026-11-v1',
+      consentHash: KERBWELL_DISCLOSURE_SHA256,
     });
 
     // Both rows parse as audit log entries the certificate and the audit page can render.
@@ -162,6 +163,25 @@ describe('openKerbwellGateSession', () => {
     const identity = state.auditLogs.find((l) => l.type === 'KERBWELL_IDENTITY_VERIFIED');
     expect(identity?.data).toMatchObject({ singleFactor: true });
     expect(String((identity?.data as { assuranceLabel: string }).assuranceLabel)).toMatch(/single-factor/);
+  });
+
+  it('refuses consent to any wording other than the disclosure shown, and writes nothing', async () => {
+    const cases = [
+      { consent_version: 'au-eta-2026-10-v0' },
+      { consent_hash: 'b'.repeat(64) },
+      { consent_version: 'au-eta-2026-10-v0', consent_hash: 'b'.repeat(64) },
+      { consent_hash: KERBWELL_DISCLOSURE_SHA256.toUpperCase() },
+    ];
+
+    for (const over of cases) {
+      const err = await openKerbwellGateSession({ claims: claims(over), requestMetadata, now: NOW }).catch((e) => e);
+      expect(err).toBeInstanceOf(KerbwellGateRefusedError);
+      expect(err.reason).toBe('consent');
+    }
+
+    expect(state.sessions).toHaveLength(0);
+    expect(state.auditLogs).toHaveLength(0);
+    expect(state.jtis.size).toBe(0);
   });
 
   it('refuses a replayed jti', async () => {
