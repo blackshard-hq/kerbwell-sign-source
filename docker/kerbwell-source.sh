@@ -47,16 +47,17 @@ scan() {
   local rev="${1:-HEAD}" work
   command -v gitleaks >/dev/null || die "gitleaks is not installed"
   work="$(mktemp -d)"
-  trap 'rm -rf "$work"' RETURN
   git -C "$ROOT" archive --format=tar "$(commit_of "$rev")" | tar -x -C "$work"
   # Findings are reported by file and rule only (--redact), so a secret is never printed.
   # Reviewed upstream samples are listed by path:rule:line in the tree's own
   # docker/kerbwell-gitleaks.ignore; anything else fails.
   if ! (cd "$work" && gitleaks dir . --no-banner --redact --exit-code 1 \
     --gitleaks-ignore-path "$work/docker/kerbwell-gitleaks.ignore" >&2); then
+    rm -rf "$work"
     say "secret scan found something in $(tree_of "$rev"); nothing published"
     return 1
   fi
+  rm -rf "$work"
   say "secret scan clean: tree $(tree_of "$rev")"
 }
 
