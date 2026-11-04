@@ -136,6 +136,14 @@ export const DocumentSigningAuthProvider = ({
       };
     }
 
+    // Kerbwell gate: the signer proved who they are before the page opened, and the server checks
+    // the gate cookie on every action.
+    if (derivedRecipientActionAuth.includes(DocumentAuth.KERBWELL_GATE)) {
+      return {
+        type: DocumentAuth.KERBWELL_GATE,
+      };
+    }
+
     return null;
   }, [derivedRecipientActionAuth, user, recipient]);
 
@@ -174,6 +182,7 @@ export const DocumentSigningAuthProvider = ({
     derivedRecipientActionAuth &&
       derivedRecipientActionAuth.length > 0 &&
       !derivedRecipientActionAuth.includes(DocumentAuth.EXPLICIT_NONE) &&
+      !derivedRecipientActionAuth.includes(DocumentAuth.KERBWELL_GATE) &&
       user?.email !== recipient.email,
   );
 

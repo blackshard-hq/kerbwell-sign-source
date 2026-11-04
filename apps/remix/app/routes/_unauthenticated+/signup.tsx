@@ -2,6 +2,7 @@ import {
   IS_GOOGLE_SSO_ENABLED,
   IS_MICROSOFT_SSO_ENABLED,
   IS_OIDC_SSO_ENABLED,
+  isKerbwellAdminOidcOnly,
   isSignupEnabledForProvider,
 } from '@documenso/lib/constants/auth';
 import { isValidReturnTo, normalizeReturnTo } from '@documenso/lib/utils/is-valid-return-to';
@@ -26,7 +27,8 @@ export function loader({ request }: Route.LoaderArgs) {
   const isAnySignupEnabled =
     isEmailPasswordSignupEnabled || isGoogleSignupEnabled || isMicrosoftSignupEnabled || isOidcSignupEnabled;
 
-  if (!isAnySignupEnabled) {
+  // Kerbwell Sign admin lockdown: accounts come from Kerbwell Identity, never from this page.
+  if (!isAnySignupEnabled || isKerbwellAdminOidcOnly()) {
     throw redirect('/signin');
   }
 

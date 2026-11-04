@@ -5,6 +5,7 @@ import {
   IS_MICROSOFT_SSO_ENABLED,
   IS_OIDC_AUTO_REDIRECT_DISABLED,
   IS_OIDC_SSO_ENABLED,
+  isKerbwellAdminOidcOnly,
   isSigninEnabledForProvider,
   isSignupEnabledForProvider,
   OIDC_PROVIDER_LABEL,
@@ -41,15 +42,19 @@ export async function loader({ request }: Route.LoaderArgs) {
   const isOIDCOnlyTransport =
     isOIDCSSOEnabled && !isEmailPasswordSigninEnabled && !isGoogleSSOEnabled && !isMicrosoftSSOEnabled;
 
-  const shouldAutoRedirectToOIDC = isOIDCOnlyTransport && !IS_OIDC_AUTO_REDIRECT_DISABLED;
+  // A refused sign-in comes back with ?error=; redirecting again would loop.
+  const hasSigninError = new URL(request.url).searchParams.has('error');
+
+  const shouldAutoRedirectToOIDC = isOIDCOnlyTransport && !IS_OIDC_AUTO_REDIRECT_DISABLED && !hasSigninError;
 
   const oidcProviderLabel = OIDC_PROVIDER_LABEL;
 
   const isSignupEnabled =
-    isSignupEnabledForProvider('email') ||
-    (IS_GOOGLE_SSO_ENABLED && isSignupEnabledForProvider('google')) ||
-    (IS_MICROSOFT_SSO_ENABLED && isSignupEnabledForProvider('microsoft')) ||
-    (IS_OIDC_SSO_ENABLED && isSignupEnabledForProvider('oidc'));
+    !isKerbwellAdminOidcOnly() &&
+    (isSignupEnabledForProvider('email') ||
+      (IS_GOOGLE_SSO_ENABLED && isSignupEnabledForProvider('google')) ||
+      (IS_MICROSOFT_SSO_ENABLED && isSignupEnabledForProvider('microsoft')) ||
+      (IS_OIDC_SSO_ENABLED && isSignupEnabledForProvider('oidc')));
 
   let returnTo = new URL(request.url).searchParams.get('returnTo') ?? undefined;
 
@@ -57,19 +62,6 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   if (isAuthenticated) {
     throw redirect(returnTo || '/');
-  }
-
-  // Black Shard fork (2026-09-24): a signed-in portal member arriving here
-  // carries the parent-domain `bs-upn` cookie. Hand them to the native
-  // portal-session route, which mints the session and returns them to
-  // returnTo. `direct=1` is what that route sets when the cookie fails, so a
-  // refused cookie lands on the form once and never loops.
-  const requestUrl = new URL(request.url);
-  const hasPortalCookie = (request.headers.get('cookie') ?? '')
-    .split(';')
-    .some((part) => part.trim().startsWith('bs-upn='));
-  if (process.env.PORTAL_TRUST === '1' && hasPortalCookie && requestUrl.searchParams.get('direct') !== '1') {
-    throw redirect(`/api/auth/portal-session/sso?redirectPath=${encodeURIComponent(returnTo || '/')}`);
   }
 
   return {

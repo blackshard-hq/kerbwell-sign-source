@@ -657,6 +657,9 @@ model Recipient {
   cscCredential CscCredential?
   cscSession    CscSession?
 
+  kerbwellGateSessions   KerbwellGateSession[]
+  kerbwellGateAssertions KerbwellGateAssertion[]
+
   @@index([token])
   @@index([email])
   @@index([envelopeId])
@@ -1272,4 +1275,48 @@ model RateLimit {
 
   @@id([key, action, bucket])
   @@index([createdAt])
+}
+
+/// Kerbwell gate (fork addition, Kerbwell Sign): each signer assertion accepted at
+/// /api/kerbwell/gate, by jti, so an assertion opens one gate session once.
+model KerbwellGateAssertion {
+  jti         String    @id
+  recipientId Int
+  recipient   Recipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  envelopeId  String
+  acceptedAt  DateTime  @default(now())
+  /// The assertion's own exp. Rows past it can be pruned; a replay after that fails on exp anyway.
+  expiresAt   DateTime
+
+  @@index([recipientId])
+  @@index([expiresAt])
+}
+
+/// Kerbwell gate session: what the __Host-kw_gate cookie stands for. One recipient, 30 minutes,
+/// only the SHA-256 of the cookie handle stored.
+model KerbwellGateSession {
+  id             String    @id @default(cuid())
+  tokenHash      String    @unique
+  recipientId    Int
+  recipient      Recipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  envelopeId     String
+  jti            String
+  authTime       DateTime
+  acr            String
+  amr            String[]
+  consentVersion String
+  consentHash    String
+  idvRef         String?
+  legalName      String
+  docKind        String
+  mode           String?
+  ipAddress      String?
+  userAgent      String?
+  cfCity         String?
+  createdAt      DateTime  @default(now())
+  expiresAt      DateTime
+  revokedAt      DateTime?
+
+  @@index([recipientId])
+  @@index([expiresAt])
 }

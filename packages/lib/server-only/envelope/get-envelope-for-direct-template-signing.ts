@@ -117,6 +117,7 @@ export const getEnvelopeForDirectTemplateSigning = async ({
     match(auth)
       .with(DocumentAccessAuth.ACCOUNT, () => Boolean(userId))
       .with(DocumentAccessAuth.TWO_FACTOR_AUTH, () => true)
+      .with(DocumentAccessAuth.KERBWELL_GATE, () => false) // A direct link has no recipient to gate
       .exhaustive(),
   );
 

@@ -20,6 +20,7 @@ export const AuthenticationErrorCode = {
   SigninDisabled: 'SIGNIN_DISABLED',
   SignupDisabled: 'SIGNUP_DISABLED',
   SignupDisposableEmail: 'SIGNUP_DISPOSABLE_EMAIL',
+  KerbwellAdminRefused: 'KERBWELL_ADMIN_REFUSED',
   // IncorrectTwoFactorBackupCode: 'INCORRECT_TWO_FACTOR_BACKUP_CODE',
   // IncorrectIdentityProvider: 'INCORRECT_IDENTITY_PROVIDER',
   // IncorrectPassword: 'INCORRECT_PASSWORD',

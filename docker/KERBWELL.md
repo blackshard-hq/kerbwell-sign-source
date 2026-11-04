@@ -35,6 +35,13 @@ run from `/app/apps/remix` against the same Postgres database.
 | `NEXT_PRIVATE_INTERNAL_API_HOSTS` | the app's internal FQDN, e.g. `kerbwell-esign.internal.<env-domain>`, comma separated if more than one. When set, `/api/v1`, `/api/v2` and `/api/v2-beta` return 404 unless the request's Host is listed, and to any request that carries a Cloudflare edge header (`cf-ray`, `cf-connecting-ip`, `cdn-loop`) whatever its Host. `/api/health`, `/api/auth`, `/api/trpc`, the gate and every page stay public. Unset, the lock is off (upstream behaviour) | no |
 | `NEXT_PRIVATE_WEBHOOK_LEGACY_SECRET_HEADER` | `false` once every receiver verifies `X-Kerbwell-Signature`. Anything else (including unset) also sends the upstream `X-Documenso-Secret` header, which carries the secret in clear | no |
 | `NEXT_PRIVATE_WEBHOOK_SSRF_BYPASS_HOSTS` | the staff app's internal FQDN, when the webhook targets it: an internal FQDN resolves to a private address, which the webhook SSRF guard refuses unless the host is listed here. List only that host | no |
+| `NEXT_PRIVATE_KERBWELL_GATE_ISSUER` | `https://auth.kerbwell.com.au`. Turns the Kerbwell gate on (see "Kerbwell gate" below). Unset, the gate is off and a token opens its document, as upstream | no |
+| `NEXT_PRIVATE_KERBWELL_GATE_MODE` | unset (`all`): every recipient needs the gate. `recipient` gates only recipients whose access or action auth names `KERBWELL_GATE`; `off` turns it off | no |
+| `NEXT_PRIVATE_KERBWELL_GATE_JWKS_URL`, `_AUDIENCE`, `_REAUTH_URL`, `_MAX_AUTH_AGE` | unset: `<issuer>/jwks`, `sign`, `<issuer>/signer`, `900`. The JWKS and re-auth URLs must be on the issuer's origin; the age is 60 to 900 seconds | no |
+| `NEXT_PRIVATE_CSP_SIGN_FRAME_ANCESTORS` | `https://client.kerbwell.com.au`: the only site that may frame `/sign` and `/d` (with `'self'`). With the gate on and this unset, they can be framed by this origin only | no |
+| `NEXT_PUBLIC_KERBWELL_ADMIN_OIDC_ONLY` | `true`: the admin UI is reached only by OIDC against Kerbwell Identity, for the `kerbwell-sign-admin` role with a passkey amr (see "Admin sign-in" below) | no |
+| `NEXT_PRIVATE_OIDC_WELL_KNOWN`, `NEXT_PRIVATE_OIDC_CLIENT_ID`, `NEXT_PRIVATE_OIDC_CLIENT_SECRET`, `NEXT_PRIVATE_OIDC_PROVIDER_LABEL` | `https://auth.kerbwell.com.au/.well-known/openid-configuration`, the `kerbwell-sign` client, its secret (Key Vault reference), `Kerbwell Account` | the secret |
+| `NEXT_PRIVATE_KERBWELL_ADMIN_ROLE`, `_ROLES_CLAIM`, `_AMR` | unset: `kerbwell-sign-admin`, `roles`, `passkey,webauthn,hwk,swk` | no |
 | `BRAND_SECURITY_CONTACT`, `BRAND_SECURITY_POLICY`, `BRAND_SECURITY_EXPIRES` | the security.txt fields; with a brand set, Contact defaults to `mailto:` the support mailbox and Policy is omitted when unset | no |
 
 `/.well-known/security.txt` and `/site.webmanifest` are served from these values.
@@ -95,6 +102,87 @@ request carrying a Cloudflare edge header returns 404, and `/api/health` and `/s
 public. A skipped test fails the job. To run it locally, start the app the same way and set
 `KERBWELL_E2E_INTERNAL_URL=http://127.0.0.1:3000`, `KERBWELL_E2E_PUBLIC_URL=http://localhost:3000`
 and `KERBWELL_E2E_API_TOKEN`.
+
+## Kerbwell gate
+
+With `NEXT_PRIVATE_KERBWELL_GATE_ISSUER` set, a signer reaches a document only through Kerbwell
+Identity. A copied `/sign/{token}` link on its own shows "This link is no longer active" and the
+agent to contact, and every recipient call made with the token alone is refused.
+
+1. The portal gate (`/s/{ref}`) hands the signer to Kerbwell Identity's signer flow, which
+   verifies them on a second channel and mints a signer assertion.
+2. Kerbwell Identity sends the browser here with an auto-submitted top-level POST:
+   `POST https://sign.kerbwell.com.au/api/kerbwell/gate`, form field `assertion`.
+3. The fork verifies the assertion against the issuer's JWKS (fetched from the pinned URL and
+   cached), records its `jti` (a second use is refused), opens a 30-minute gate session for that
+   one recipient, sets `__Host-kw_gate` (HttpOnly, Secure, SameSite=Lax, Path=/) and 303s to
+   `/sign/{token}`. The token comes from the recipient row and never travels in Kerbwell's
+   messages. A refused assertion lands on `/link-inactive?reason=retry`.
+4. The signing pages, their data requests, the PDF file routes, the embed and report pages and
+   every recipient tRPC call need that cookie for that recipient (403 or the inactive page
+   otherwise). Direct template links are refused outright under mode `all`.
+5. At Complete, a verification older than 15 minutes gets `KERBWELL_REAUTH_REQUIRED`; the
+   browser goes to `<issuer>/signer?prompt=login&max_age=0&recipient=<id>&envelope=<id>`.
+   Kerbwell Identity verifies the signer again and posts a fresh assertion, which returns them to
+   the same document with their fields kept.
+
+### The signer assertion
+
+An ES256 JWT, at most 5 minutes from `iat` to `exp` (Kerbwell Identity mints 2):
+
+| Claim | Meaning |
+|---|---|
+| `iss` | the issuer, exactly `NEXT_PRIVATE_KERBWELL_GATE_ISSUER` |
+| `aud` | `sign` |
+| `sub` | the Documenso recipient id |
+| `env` | the envelope id (`envelope_...`) or its `document_<n>` secondary id |
+| `jti` | single use, 16 to 128 of `A-Za-z0-9_-` |
+| `iat`, `exp`, `auth_time` | seconds; `auth_time` is when the signer was verified |
+| `acr` | `kw-sign-l1`, `kw-sign-l1-single` (one channel; labelled single-factor, refused for `agency_agreement`) or `kw-sign-l2` |
+| `amr` | the methods used, e.g. `["otp_sms"]`, `["passkey"]`, `["otp_email","idv"]` |
+| `consent_version`, `consent_hash` | the consent wording version and its SHA-256 (hex) |
+| `idv_ref` | the FrankieOne reference at level 2, else null |
+| `legal_name` | the CDD legal name (the typed signature defaults to it) |
+| `doc_kind` | `agency_agreement`, `engagement_letter`, `cdd_acknowledgement` or `general_non_prescribed` |
+| `ip`, `ua`, `cf_city` | what Kerbwell Identity saw at verification |
+| `mode` | `remote` or `in_person` |
+
+### What the audit log records
+
+`KERBWELL_IDENTITY_VERIFIED` on every accepted assertion: acr, amr, the single-factor flag and
+its label, auth time, IDV reference, assertion id, document kind, mode, and the ip, user agent
+and city from verification (the row's own ip and user agent are the browser at the gate), and
+whether it was a re-verification. `KERBWELL_CONSENT_GIVEN` the first time a recipient consents
+on a given consent version and hash.
+
+### The agent on the inactive page
+
+Dispatch sets the envelope's `meta.emailReplyTo` to the sending agent and adds the agent as a
+recipient (the counter-signer or a CC). The page names that recipient. Without one it says "the
+agent who sent it to you".
+
+### Headers
+
+`/sign`, `/d` and `/link-inactive` always send `Referrer-Policy: no-referrer` and
+`Cache-Control: no-store`, and `frame-ancestors 'self'` plus `NEXT_PRIVATE_CSP_SIGN_FRAME_ANCESTORS`.
+
+## Admin sign-in
+
+`NEXT_PUBLIC_KERBWELL_ADMIN_OIDC_ONLY=true` leaves one way into the admin UI: OIDC against Kerbwell
+Identity (`NEXT_PRIVATE_OIDC_*`). The callback verifies the id_token against the provider's
+`jwks_uri` (ES256 or RS256, `iss` the discovered issuer, `aud` the client id) and accepts it only
+with the `kerbwell-sign-admin` role in `roles` and a passkey method in `amr`; anything else goes
+back to `/signin?error=KERBWELL_ADMIN_REFUSED` and touches no account. Email and password sign-in,
+sign-up and reset, Google, Microsoft, organisation SSO and the built-in passkey sign-in all
+answer 403, and `/signin` redirects straight to Kerbwell Identity. The client is a confidential
+client with `client_secret_basic` and PKCE S256. The portal-session SSO handoff is removed.
+
+The bootstrap administrator signs in through OIDC once Kerbwell Identity issues it the role (the
+account is linked by its email). Its password stays in the database unused until INFRA-B removes
+`KERBWELL_ESIGN_ADMIN_PASSWORD` from Key Vault after OIDC is proven.
+
+CI runs `packages/app-tests/e2e/kerbwell-gate` against the image with the gate and the admin
+lockdown on, using a stand-in identity service on 127.0.0.1:4455 (`fake-identity.ts`).
 
 ## Webhook signature
 

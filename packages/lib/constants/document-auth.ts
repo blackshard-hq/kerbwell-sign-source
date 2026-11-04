@@ -30,4 +30,8 @@ export const DOCUMENT_AUTH_TYPES: Record<string, DocumentAuthTypeData> = {
     key: DocumentAuth.EXPLICIT_NONE,
     value: msg`None (Overrides global settings)`,
   },
+  [DocumentAuth.KERBWELL_GATE]: {
+    key: DocumentAuth.KERBWELL_GATE,
+    value: msg`Require Kerbwell identity check`,
+  },
 } satisfies Record<TDocumentAuth, DocumentAuthTypeData>;

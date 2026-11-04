@@ -50,6 +50,14 @@ jobs:
         run: npx vitest run server/middleware.test.ts
         working-directory: apps/remix
 
+      - name: Kerbwell gate and admin sign-in (unit)
+        run: npx vitest run server-only/kerbwell-gate
+        working-directory: packages/lib
+
+      - name: Kerbwell gate page guard (unit)
+        run: npx vitest run server/api/kerbwell-gate.test.ts
+        working-directory: apps/remix
+
       - name: Source gate logic
         run: node --test docker/kerbwell-source-gate.test.mjs
 
@@ -65,6 +73,9 @@ jobs:
   # migrated Postgres, then the app with NEXT_PRIVATE_INTERNAL_API_HOSTS=127.0.0.1, set up by
   # the bootstrap job as on ACA, and the Playwright host-lock spec run against it twice over
   # (127.0.0.1 is the internal host, localhost is a public name for the same server).
+  # The same app runs with the Kerbwell gate and the admin OIDC lockdown on, both pointed at
+  # 127.0.0.1:4455, where the gate specs serve a stand-in Kerbwell Identity (JWKS, the
+  # auto-submitted assertion POST, the prompt=login re-entry and a minimal OIDC provider).
   image_tests:
     name: Bootstrap and host lock against the image
     runs-on: ubuntu-latest
@@ -101,12 +112,19 @@ jobs:
           export NEXT_PUBLIC_WEBAPP_URL='http://localhost:3000'
           export NEXT_PUBLIC_UPLOAD_TRANSPORT='database'
           export NEXT_PRIVATE_INTERNAL_API_HOSTS='127.0.0.1'
+          export NEXT_PRIVATE_KERBWELL_GATE_ISSUER='http://127.0.0.1:4455'
+          export NEXT_PUBLIC_KERBWELL_ADMIN_OIDC_ONLY='true'
+          export NEXT_PRIVATE_OIDC_WELL_KNOWN='http://127.0.0.1:4455/.well-known/openid-configuration'
+          export NEXT_PRIVATE_OIDC_CLIENT_ID='kerbwell-sign-e2e'
+          export NEXT_PRIVATE_OIDC_CLIENT_SECRET="$(rnd)"
           docker run -d --name kw-db -p 127.0.0.1:5432:5432 -e POSTGRES_PASSWORD postgres:16-alpine >/dev/null
           for _ in $(seq 1 60); do docker exec kw-db pg_isready -U postgres -q 2>/dev/null && break; sleep 1; done
           docker run -d --name kw-app --network host \
             -e NEXT_PRIVATE_DATABASE_URL -e NEXT_PRIVATE_DIRECT_DATABASE_URL -e NEXTAUTH_SECRET \
             -e NEXT_PRIVATE_ENCRYPTION_KEY -e NEXT_PRIVATE_ENCRYPTION_SECONDARY_KEY \
             -e NEXT_PUBLIC_WEBAPP_URL -e NEXT_PUBLIC_UPLOAD_TRANSPORT -e NEXT_PRIVATE_INTERNAL_API_HOSTS \
+            -e NEXT_PRIVATE_KERBWELL_GATE_ISSUER -e NEXT_PUBLIC_KERBWELL_ADMIN_OIDC_ONLY \
+            -e NEXT_PRIVATE_OIDC_WELL_KNOWN -e NEXT_PRIVATE_OIDC_CLIENT_ID -e NEXT_PRIVATE_OIDC_CLIENT_SECRET \
             kerbwell-esign:ci >/dev/null
           for i in $(seq 1 120); do
             [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/health)" = 200 ] && break
@@ -127,6 +145,10 @@ jobs:
             -e KERBWELL_ESIGN_WEBHOOK_URL -e KERBWELL_ESIGN_WEBHOOK_SECRET \
             --entrypoint node kerbwell-esign:ci kerbwell-bootstrap.mjs
           echo "KERBWELL_E2E_API_TOKEN=${token}" >> "$GITHUB_ENV"
+          # The gate specs seed documents into the app's database.
+          echo "::add-mask::${POSTGRES_PASSWORD}"
+          echo "NEXT_PRIVATE_DATABASE_URL=${NEXT_PRIVATE_DATABASE_URL}" >> "$GITHUB_ENV"
+          echo "NEXT_PRIVATE_DIRECT_DATABASE_URL=${NEXT_PRIVATE_DIRECT_DATABASE_URL}" >> "$GITHUB_ENV"
           # The running container keeps its image; the build cache is not needed again.
           docker buildx prune -af >/dev/null
           df -h / | tail -1
@@ -144,6 +166,23 @@ jobs:
             --project ui --retries 0 --reporter list | tee pw.log
           grep -qE '[0-9]+ passed' pw.log
           if grep -qE '[0-9]+ (skipped|failed)' pw.log; then echo "::error::a host-lock test was skipped or failed"; exit 1; fi
+
+      - name: Playwright browser
+        working-directory: packages/app-tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright gate and admin sign-in specs
+        working-directory: packages/app-tests
+        env:
+          KERBWELL_E2E_GATE_ISSUER: 'http://127.0.0.1:4455'
+          KERBWELL_E2E_ADMIN_OIDC: '1'
+          KERBWELL_E2E_OIDC_CLIENT_ID: 'kerbwell-sign-e2e'
+          NEXT_PUBLIC_WEBAPP_URL: 'http://localhost:3000'
+        run: |
+          NODE_OPTIONS='--import tsx' npx playwright test e2e/kerbwell-gate \
+            --project ui --workers 1 --retries 0 --reporter list | tee pw-gate.log
+          grep -qE '[0-9]+ passed' pw-gate.log
+          if grep -qE '[0-9]+ (skipped|failed|flaky)' pw-gate.log; then echo "::error::a gate test was skipped or failed"; exit 1; fi
 
       - name: App log on failure
         if: failure()

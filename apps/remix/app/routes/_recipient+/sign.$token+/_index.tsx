@@ -16,6 +16,7 @@ import { getEnvelopeForRecipientSigning } from '@documenso/lib/server-only/envel
 import { getEnvelopeRequiredAccessData } from '@documenso/lib/server-only/envelope/get-envelope-required-access-data';
 import { getCompletedFieldsForToken } from '@documenso/lib/server-only/field/get-completed-fields-for-token';
 import { getFieldsForToken } from '@documenso/lib/server-only/field/get-fields-for-token';
+import { resolveKerbwellGateForSigning } from '@documenso/lib/server-only/kerbwell-gate';
 import { getIsRecipientsTurnToSign } from '@documenso/lib/server-only/recipient/get-is-recipient-turn';
 import { getNextPendingRecipient } from '@documenso/lib/server-only/recipient/get-next-pending-recipient';
 import { getRecipientByToken } from '@documenso/lib/server-only/recipient/get-recipient-by-token';
@@ -45,6 +46,7 @@ import { DocumentSigningPageViewV1 } from '~/components/general/document-signing
 import { DocumentSigningPageViewV2 } from '~/components/general/document-signing/document-signing-page-view-v2';
 import { DocumentSigningProvider } from '~/components/general/document-signing/document-signing-provider';
 import { EnvelopeSigningProvider } from '~/components/general/document-signing/envelope-signing-provider';
+import { KerbwellGateSigningProvider } from '~/components/general/kerbwell/gate-signing-context';
 import { RecipientBranding } from '~/components/general/recipient-branding';
 import { useCspNonce } from '~/utils/nonce';
 import { superLoaderJson, useSuperLoaderData } from '~/utils/super-json-loader';
@@ -114,10 +116,23 @@ const handleV1Loader = async ({ params, request }: Route.LoaderArgs) => {
     recipientAuth: recipient.authOptions,
   });
 
+  // Kerbwell gate: server/api/kerbwell-gate.ts already turned away a request without a gate
+  // session; this repeats the check where the document is read.
+  const kerbwellGate = await resolveKerbwellGateForSigning({
+    cookieHeader: request.headers.get('cookie'),
+    recipient,
+    documentAuth: document.authOptions,
+  });
+
+  if (kerbwellGate.refused) {
+    throw redirect(`/sign/${encodeURIComponent(token)}/inactive`);
+  }
+
   const isAccessAuthValid = derivedRecipientAccessAuth.every((accesssAuth) =>
     match(accesssAuth)
       .with(DocumentAccessAuth.ACCOUNT, () => user && user.email === recipient.email)
       .with(DocumentAccessAuth.TWO_FACTOR_AUTH, () => true) // Allow without account requirement
+      .with(DocumentAccessAuth.KERBWELL_GATE, () => kerbwellGate.context !== null)
       .exhaustive(),
   );
 
@@ -177,6 +192,7 @@ const handleV1Loader = async ({ params, request }: Route.LoaderArgs) => {
       brandingEnabled: settings.brandingEnabled,
       brandingLogo: settings.brandingLogo,
     },
+    kerbwellGate: kerbwellGate.context,
   } as const;
 };
 
@@ -227,10 +243,21 @@ const handleV2Loader = async ({ params, request }: Route.LoaderArgs) => {
     recipientAuth: recipient.authOptions,
   });
 
+  const kerbwellGate = await resolveKerbwellGateForSigning({
+    cookieHeader: request.headers.get('cookie'),
+    recipient,
+    documentAuth: envelope.authOptions,
+  });
+
+  if (kerbwellGate.refused) {
+    throw redirect(`/sign/${encodeURIComponent(token)}/inactive`);
+  }
+
   const isAccessAuthValid = derivedRecipientAccessAuth.every((accesssAuth) =>
     match(accesssAuth)
       .with(DocumentAccessAuth.ACCOUNT, () => user && user.email === recipient.email)
       .with(DocumentAccessAuth.TWO_FACTOR_AUTH, () => true) // Allow without account requirement
+      .with(DocumentAccessAuth.KERBWELL_GATE, () => kerbwellGate.context !== null)
       .exhaustive(),
   );
 
@@ -321,6 +348,7 @@ const handleV2Loader = async ({ params, request }: Route.LoaderArgs) => {
   return {
     isDocumentAccessValid: true,
     envelopeForSigning,
+    kerbwellGate: kerbwellGate.context,
   } as const;
 };
 
@@ -388,11 +416,13 @@ export default function SigningPage() {
   const data = useSuperLoaderData<typeof loader>();
   const cspNonce = useCspNonce();
 
+  const kerbwellGate = 'kerbwellGate' in data.payload ? (data.payload.kerbwellGate ?? null) : null;
+
   return (
-    <>
+    <KerbwellGateSigningProvider value={kerbwellGate}>
       <RecipientBranding branding={data.branding} cspNonce={cspNonce} />
       {data.version === 2 ? <SigningPageV2 data={data.payload} /> : <SigningPageV1 data={data.payload} />}
-    </>
+    </KerbwellGateSigningProvider>
   );
 }
 

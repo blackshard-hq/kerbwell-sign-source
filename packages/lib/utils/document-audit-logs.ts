@@ -650,6 +650,24 @@ export const formatDocumentAuditLogAction = (i18n: I18n, auditLog: TDocumentAudi
       you: msg`Your remote signature was applied`,
       user: msg`${user}'s remote signature was applied`,
     }))
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.KERBWELL_IDENTITY_VERIFIED }, ({ data }) =>
+      data.singleFactor
+        ? {
+            anonymous: msg`Recipient's identity was verified (single-factor)`,
+            you: msg`Your identity was verified (single-factor)`,
+            user: msg`${user}'s identity was verified (single-factor)`,
+          }
+        : {
+            anonymous: msg`Recipient's identity was verified`,
+            you: msg`Your identity was verified`,
+            user: msg`${user}'s identity was verified`,
+          },
+    )
+    .with({ type: DOCUMENT_AUDIT_LOG_TYPE.KERBWELL_CONSENT_GIVEN }, () => ({
+      anonymous: msg`Recipient agreed to sign electronically`,
+      you: msg`You agreed to sign electronically`,
+      user: msg`${user} agreed to sign electronically`,
+    }))
     .exhaustive();
 
   let selectedDescription = description.anonymous;

@@ -68,6 +68,7 @@ async function handleV1Loader({ params, request }: Route.LoaderArgs) {
     match(auth)
       .with(DocumentAccessAuth.ACCOUNT, () => !!user)
       .with(DocumentAccessAuth.TWO_FACTOR_AUTH, () => false) // Not supported for direct links
+      .with(DocumentAccessAuth.KERBWELL_GATE, () => false) // A direct link has no recipient to gate
       .exhaustive(),
   );
 
@@ -178,6 +179,7 @@ async function handleV2Loader({ params, request }: Route.LoaderArgs) {
     match(accesssAuth)
       .with(DocumentAccessAuth.ACCOUNT, () => user && user.email === recipient.email)
       .with(DocumentAccessAuth.TWO_FACTOR_AUTH, () => false) // Not supported for direct links
+      .with(DocumentAccessAuth.KERBWELL_GATE, () => false) // A direct link has no recipient to gate
       .exhaustive(),
   );
 
