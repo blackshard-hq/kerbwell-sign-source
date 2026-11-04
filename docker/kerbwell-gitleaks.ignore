@@ -1,0 +1,27 @@
+# Gitleaks findings reviewed and accepted before the Kerbwell Sign source is published
+# (docker/kerbwell-source.sh scan). Every entry is upstream Documenso sample content that is
+# already public in documenso/documenso: documentation example tokens and a test key inside an
+# upstream dependency patch. (The upstream example signing certificate is not in this tree.) Entries are path:rule:line, so a moved
+# line or any new finding fails the scan until a person reviews it and updates this file.
+apps/docs/content/docs/developers/api/recipients.mdx:generic-api-key:204
+apps/docs/content/docs/developers/api/recipients.mdx:generic-api-key:217
+apps/docs/content/docs/developers/getting-started/first-api-call.mdx:curl-auth-header:228
+apps/docs/content/docs/developers/getting-started/first-api-call.mdx:curl-auth-header:46
+apps/docs/content/docs/developers/getting-started/first-api-call.mdx:curl-auth-header:96
+apps/docs/content/docs/developers/webhooks/events.mdx:generic-api-key:156
+apps/docs/content/docs/developers/webhooks/events.mdx:generic-api-key:178
+apps/docs/content/docs/developers/webhooks/events.mdx:generic-api-key:250
+apps/docs/content/docs/developers/webhooks/events.mdx:generic-api-key:272
+apps/docs/content/docs/developers/webhooks/events.mdx:generic-api-key:450
+apps/docs/content/docs/developers/webhooks/events.mdx:generic-api-key:473
+apps/docs/content/docs/developers/webhooks/events.mdx:generic-api-key:498
+apps/docs/content/docs/developers/webhooks/events.mdx:generic-api-key:521
+apps/docs/content/docs/developers/webhooks/events.mdx:generic-api-key:633
+apps/docs/content/docs/developers/webhooks/events.mdx:generic-api-key:655
+apps/docs/content/docs/self-hosting/configuration/signing-certificate/google-cloud-hsm.mdx:generic-api-key:60
+apps/docs/content/docs/self-hosting/configuration/storage.mdx:generic-api-key:376
+apps/docs/content/docs/self-hosting/configuration/storage.mdx:generic-api-key:384
+apps/docs/content/docs/self-hosting/deployment/kubernetes.mdx:generic-api-key:713
+apps/docs/content/docs/self-hosting/deployment/kubernetes.mdx:generic-api-key:714
+patches/@ai-sdk+google-vertex+3.0.81.patch:private-key:121
+patches/@ai-sdk+google-vertex+3.0.81.patch:private-key:91

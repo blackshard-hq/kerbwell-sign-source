@@ -1,0 +1,7 @@
+Black Shard stub package (AGPL-3.0-only, same licence as the fork).
+
+The upstream @documenso/ee package is licensed under the Documenso
+Commercial License and is not distributed in this fork. This package is a
+Black Shard reimplementation of the module surface community code imports:
+self-hosted limits are unlimited, billing operations are no-ops, and
+enterprise-only features are unavailable at runtime.
