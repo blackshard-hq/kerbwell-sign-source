@@ -27,6 +27,12 @@ concurrency:
   group: kerbwell-source-${{ github.ref }}
   cancel-in-progress: false
 
+# Runner: the jobs that need no docker daemon (platform_tests, source_check_negative) read the repository variable
+# RUNNER: a self-hosted pool label while the hosted-minutes budget is spent, a hosted label as overflow; unset =
+# ubuntu-latest. The pool refuses a job without a container, so there each runs in a pinned node image (the
+# `container:` expression, empty on a hosted runner). image_tests, source_gate_build and publish_source drive the
+# runner's own docker daemon (sibling containers on the host network, host-path binds, buildx) and stay on
+# ubuntu-latest.
 env:
   GITLEAKS_VERSION: '8.30.1'
   GITLEAKS_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'
@@ -35,7 +41,13 @@ env:
 jobs:
   platform_tests:
     name: Kerbwell platform tests
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.RUNNER || '["ubuntu-latest"]') }}
+    container: ${{ contains(vars.RUNNER || '', 'self-hosted') && fromJSON('{"image":"node:22-bookworm@sha256:63538dfe497cc29dfafdda25ada09b46db68a3f4cc205abf1f5d6bf0913f3384","options":"--init --cpus 2 --memory 3g --memory-swap 3g --pids-limit 4096"}') || '' }}
+    timeout-minutes: 20
+    # bash, as on a hosted runner: a job container's default shell is sh
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -196,7 +208,13 @@ jobs:
 
   source_check_negative:
     name: Source check refuses a private commit
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.RUNNER || '["ubuntu-latest"]') }}
+    container: ${{ contains(vars.RUNNER || '', 'self-hosted') && fromJSON('{"image":"node:22-bookworm@sha256:63538dfe497cc29dfafdda25ada09b46db68a3f4cc205abf1f5d6bf0913f3384","options":"--init --cpus 1 --memory 1g --memory-swap 1g --pids-limit 512"}') || '' }}
+    timeout-minutes: 10
+    # bash, as on a hosted runner: a job container's default shell is sh
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
