@@ -31,10 +31,6 @@ export interface DocumentSigningRejectDialogProps {
   token: string;
   onRejected?: (reason: string) => void | Promise<void>;
   trigger?: React.ReactNode;
-  /** Kerbwell: the reason the dialog opens with (Wrong person and Request paper prefill it). */
-  defaultReason?: string;
-  /** Kerbwell: the dialog title and button text in place of "Reject Document". */
-  title?: string;
 }
 
 export function DocumentSigningRejectDialog({
@@ -42,8 +38,6 @@ export function DocumentSigningRejectDialog({
   token,
   onRejected,
   trigger,
-  defaultReason = '',
-  title,
 }: DocumentSigningRejectDialogProps) {
   const { t } = useLingui();
   const { toast } = useToast();
@@ -56,7 +50,7 @@ export function DocumentSigningRejectDialog({
   const form = useForm<TRejectDocumentFormSchema>({
     resolver: zodResolver(ZRejectDocumentFormSchema),
     defaultValues: {
-      reason: defaultReason,
+      reason: '',
     },
   });
 
@@ -99,7 +93,7 @@ export function DocumentSigningRejectDialog({
 
   useEffect(() => {
     if (!isOpen) {
-      form.reset({ reason: defaultReason });
+      form.reset();
     }
   }, [isOpen]);
 
@@ -115,7 +109,9 @@ export function DocumentSigningRejectDialog({
 
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{title ?? <Trans>Reject Document</Trans>}</DialogTitle>
+          <DialogTitle>
+            <Trans>Reject Document</Trans>
+          </DialogTitle>
 
           <DialogDescription>
             <Trans>Are you sure you want to reject this document? This action cannot be undone.</Trans>
@@ -133,7 +129,6 @@ export function DocumentSigningRejectDialog({
                     <Textarea
                       {...field}
                       rows={4}
-                      aria-label={t`Reason`}
                       placeholder={t`Please provide a reason for rejecting this document`}
                       disabled={form.formState.isSubmitting}
                     />
@@ -159,7 +154,7 @@ export function DocumentSigningRejectDialog({
                 loading={form.formState.isSubmitting}
                 disabled={!form.formState.isValid}
               >
-                {title ?? <Trans>Reject Document</Trans>}
+                <Trans>Reject Document</Trans>
               </Button>
             </DialogFooter>
           </form>

@@ -105,10 +105,6 @@ export const DocumentSigningAutoSign = ({ recipient, fields }: DocumentSigningAu
             type: DocumentAuth.EXPLICIT_NONE,
           }))
           .with(undefined, () => undefined)
-          // The gate cookie on the request is the proof (isRecipientAuthorized).
-          .with(DocumentAuth.KERBWELL_GATE, () => ({
-            type: DocumentAuth.KERBWELL_GATE,
-          }))
           .with(
             P.union(DocumentAuth.PASSKEY, DocumentAuth.TWO_FACTOR_AUTH, DocumentAuth.PASSWORD),
             // This is a bit dirty, but the sentinel value used here is incredibly short-lived.

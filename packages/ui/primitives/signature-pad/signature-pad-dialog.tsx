@@ -22,7 +22,6 @@ export type SignaturePadDialogProps = Omit<HTMLAttributes<HTMLCanvasElement>, 'o
   typedSignatureEnabled?: boolean;
   uploadSignatureEnabled?: boolean;
   drawSignatureEnabled?: boolean;
-  defaultTab?: 'draw' | 'text' | 'image';
 };
 
 export const SignaturePadDialog = ({
@@ -36,7 +35,6 @@ export const SignaturePadDialog = ({
   uploadSignatureEnabled,
   drawSignatureEnabled,
   dialogConfirmText,
-  defaultTab,
 }: SignaturePadDialogProps) => {
   const { i18n } = useLingui();
 
@@ -123,7 +121,6 @@ export const SignaturePadDialog = ({
             typedSignatureEnabled={typedSignatureEnabled}
             uploadSignatureEnabled={uploadSignatureEnabled}
             drawSignatureEnabled={drawSignatureEnabled}
-            defaultTab={defaultTab}
           />
 
           <DialogFooter>

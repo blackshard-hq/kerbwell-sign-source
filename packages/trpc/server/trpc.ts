@@ -1,9 +1,4 @@
 import { AppError, genericErrorCodeToTrpcErrorCodeMap } from '@documenso/lib/errors/app-error';
-import {
-  assertKerbwellGateForProcedure,
-  KERBWELL_GATE_REQUIRED,
-  KERBWELL_REAUTH_REQUIRED,
-} from '@documenso/lib/server-only/kerbwell-gate/trpc-check';
 import { getApiTokenByToken } from '@documenso/lib/server-only/public-api/get-api-token-by-token';
 import { assertUserNotDisabled } from '@documenso/lib/server-only/user/assert-user-not-disabled';
 import type { TrpcApiLog } from '@documenso/lib/types/api-logs';
@@ -391,41 +386,11 @@ export const procedureMiddleware = t.middleware(async ({ ctx, next, path }) => {
 });
 
 /**
- * Kerbwell gate (fork addition, Kerbwell Sign): recipient-token procedures need the gate cookie for
- * that recipient, and Complete a verification no older than 15 minutes
- * (packages/lib server-only/kerbwell-gate/trpc-check.ts). Refusals are AppErrors, so they reach
- * the client as 403 KERBWELL_GATE_REQUIRED or 401 KERBWELL_REAUTH_REQUIRED.
- */
-export const kerbwellGateMiddleware = t.middleware(async ({ ctx, next, path, getRawInput }) => {
-  try {
-    await assertKerbwellGateForProcedure({
-      path,
-      rawInput: await getRawInput().catch(() => null),
-      cookieHeader: ctx.req.headers.get('cookie'),
-    });
-  } catch (err) {
-    // The HTTP status follows the tRPC code; the AppError rides along as the cause, so the client
-    // still gets data.appError (code, and the re-auth URL in userMessage).
-    if (err instanceof AppError && err.code === KERBWELL_GATE_REQUIRED) {
-      throw new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
-    }
-
-    if (err instanceof AppError && err.code === KERBWELL_REAUTH_REQUIRED) {
-      throw new TRPCError({ code: 'UNAUTHORIZED', message: err.message, cause: err });
-    }
-
-    throw err;
-  }
-
-  return await next();
-});
-
-/**
  * Routers and Procedures
  */
 export const router = t.router;
-export const procedure = t.procedure.use(kerbwellGateMiddleware).use(procedureMiddleware);
+export const procedure = t.procedure.use(procedureMiddleware);
 export const authenticatedProcedure = t.procedure.use(authenticatedMiddleware);
 // While this is functionally the same as `procedure`, it's useful for indicating purpose
-export const maybeAuthenticatedProcedure = t.procedure.use(kerbwellGateMiddleware).use(maybeAuthenticatedMiddleware);
+export const maybeAuthenticatedProcedure = t.procedure.use(maybeAuthenticatedMiddleware);
 export const adminProcedure = t.procedure.use(adminMiddleware);

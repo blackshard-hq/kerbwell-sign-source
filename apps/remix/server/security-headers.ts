@@ -46,27 +46,6 @@ const EMBED_PATH_REGEX = /^\/embed(\/|\.data|$)/;
 const FRAMEABLE_PATH_REGEX = /^\/(signin|forgot-password|check-email|unverified-account|sign|d)(\/|\.data|$)/;
 
 /**
- * Recipient signing pages (fork addition, Kerbwell Sign): `/sign/:token`, `/d/:token` and the
- * link-inactive page. Always `Referrer-Policy: no-referrer` and `Cache-Control: no-store`, so the
- * token in the URL never leaves in a Referer and no shared cache keeps a signer's page.
- *
- * NEXT_PRIVATE_CSP_SIGN_FRAME_ANCESTORS: space-separated https origins allowed to frame them (for
- * Kerbwell, `https://client.kerbwell.com.au`). With the Kerbwell gate on and this unset, they can
- * be framed by this origin only. With both unset, they follow NEXT_PRIVATE_CSP_FRAME_ANCESTORS.
- */
-const SIGNING_PATH_REGEX = /^\/(sign|d|link-inactive)(\/|\.data|$)/;
-
-export const signingFrameAncestors = (env: NodeJS.ProcessEnv = process.env): string[] | null => {
-  const configured = frameAncestorOrigins(env.NEXT_PRIVATE_CSP_SIGN_FRAME_ANCESTORS);
-
-  if (configured !== null) {
-    return configured;
-  }
-
-  return env.NEXT_PRIVATE_KERBWELL_GATE_ISSUER?.trim() ? [] : null;
-};
-
-/**
  * Hono context variable name where the per-request CSP nonce is stashed.
  *
  * Read by `getLoadContext` (server/load-context.ts) so the nonce can be
@@ -88,7 +67,7 @@ const generateNonce = () => {
   return btoa(binary);
 };
 
-type CspPathKind = 'embed' | 'frameable' | 'signing' | 'default';
+type CspPathKind = 'embed' | 'frameable' | 'default';
 
 /**
  * Instance hardening, read from the environment (fork addition, Kerbwell Sign).
@@ -164,11 +143,7 @@ const buildCspHeader = ({ nonce, kind }: { nonce: string; kind: CspPathKind }) =
   // Embed, signing, and auth routes are all reachable from inside a
   // customer's iframe and therefore need `frame-ancestors *`. Every other
   // page gets clickjacking protection.
-  const signingAllowed = kind === 'signing' ? signingFrameAncestors() : null;
-
-  if (signingAllowed !== null) {
-    directives.push(['frame-ancestors', `'self'`, ...signingAllowed].join(' '));
-  } else if (kind === 'embed' || kind === 'frameable' || kind === 'signing') {
+  if (kind === 'embed' || kind === 'frameable') {
     const allowed = frameAncestorOrigins();
 
     directives.push(allowed === null ? `frame-ancestors *` : ['frame-ancestors', `'self'`, ...allowed].join(' '));
@@ -182,10 +157,6 @@ const buildCspHeader = ({ nonce, kind }: { nonce: string; kind: CspPathKind }) =
 const classifyPath = (path: string): CspPathKind => {
   if (EMBED_PATH_REGEX.test(path)) {
     return 'embed';
-  }
-
-  if (SIGNING_PATH_REGEX.test(path)) {
-    return 'signing';
   }
 
   if (FRAMEABLE_PATH_REGEX.test(path)) {
@@ -246,11 +217,6 @@ export const securityHeadersMiddleware = createMiddleware<HonoEnv>(async (c, nex
 
   if (kind === 'default' && !c.res.headers.has('X-Frame-Options')) {
     c.res.headers.set('X-Frame-Options', 'SAMEORIGIN');
-  }
-
-  if (kind === 'signing') {
-    c.res.headers.set('Referrer-Policy', 'no-referrer');
-    c.res.headers.set('Cache-Control', 'no-store');
   }
 
   // Preserved from the per-route `headers()` export in

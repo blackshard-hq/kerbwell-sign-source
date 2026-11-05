@@ -1,7 +1,6 @@
 import { isBase64Image } from '@documenso/lib/constants/signatures';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { validateFieldAuth } from '@documenso/lib/server-only/document/validate-field-auth';
-import { resolveKerbwellSignatureImage } from '@documenso/lib/server-only/kerbwell-gate/drawn-signature';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '@documenso/lib/types/document-audit-logs';
 import { createDocumentAuditLogData } from '@documenso/lib/utils/document-audit-logs';
 import { extractFieldInsertionValues } from '@documenso/lib/utils/envelope-signing';
@@ -18,7 +17,7 @@ export const signEnvelopeFieldRoute = procedure
   .output(ZSignEnvelopeFieldResponseSchema)
   .mutation(async ({ input, ctx }) => {
     const { user, metadata } = ctx;
-    const { token, fieldId, fieldValue, authOptions, kerbwellDrawn } = input;
+    const { token, fieldId, fieldValue, authOptions } = input;
 
     ctx.logger.info({
       input: {
@@ -194,13 +193,7 @@ export const signEnvelopeFieldRoute = procedure
       if (fieldValue.value) {
         const isBase64 = isBase64Image(fieldValue.value);
 
-        signatureImageAsBase64 = isBase64
-          ? await resolveKerbwellSignatureImage({
-              recipientId: recipient.id,
-              value: fieldValue.value,
-              drawn: kerbwellDrawn,
-            })
-          : null;
+        signatureImageAsBase64 = isBase64 ? fieldValue.value : null;
         typedSignature = !isBase64 ? fieldValue.value : null;
       }
     }

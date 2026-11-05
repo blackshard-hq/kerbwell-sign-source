@@ -1,4 +1,3 @@
-import { KERBWELL_SIGN_AGREEMENT_LINE } from '@documenso/lib/constants/kerbwell-disclosure';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { type TRecipientAccessAuth, ZDocumentAccessAuthSchema } from '@documenso/lib/types/document-auth';
 import { fieldsContainUnsignedRequiredField } from '@documenso/lib/utils/advanced-fields-helpers';
@@ -23,6 +22,7 @@ import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { match } from 'ts-pattern';
 import { z } from 'zod';
+
 import { useEmbedSigningContext } from '~/components/embed/embed-signing-context';
 import { AccessAuth2FAForm } from '~/components/general/document-signing/access-auth-2fa-form';
 import { DocumentSigningDisclosure } from '~/components/general/document-signing/document-signing-disclosure';
@@ -199,7 +199,7 @@ export const DocumentSigningCompleteDialog = ({
           disabled={disabled}
         >
           {match({ isComplete, role: recipient.role })
-            .with({ isComplete: false }, () => <Trans>Next field</Trans>)
+            .with({ isComplete: false }, () => <Trans>Next Field</Trans>)
             .with({ isComplete: true, role: RecipientRole.APPROVER }, () => <Trans>Approve</Trans>)
             .with({ isComplete: true, role: RecipientRole.VIEWER }, () => <Trans>Mark as viewed</Trans>)
             .with({ isComplete: true }, () => <Trans>Complete</Trans>)
@@ -345,13 +345,7 @@ export const DocumentSigningCompleteDialog = ({
                   </div>
                 )}
 
-                {recipient.role === RecipientRole.SIGNER && (
-                  <p className="font-medium text-foreground text-sm" data-testid="sign-agreement-line">
-                    {KERBWELL_SIGN_AGREEMENT_LINE}
-                  </p>
-                )}
-
-                <DocumentSigningDisclosure className="mt-2" />
+                <DocumentSigningDisclosure />
 
                 <DialogFooter className="mt-4">
                   <Button
@@ -366,7 +360,7 @@ export const DocumentSigningCompleteDialog = ({
                   <Button type="submit" disabled={!isComplete} loading={form.formState.isSubmitting}>
                     {match(recipient.role)
                       .with(RecipientRole.VIEWER, () => <Trans>Mark as Viewed</Trans>)
-                      .with(RecipientRole.SIGNER, () => 'Sign agreement')
+                      .with(RecipientRole.SIGNER, () => <Trans>Sign</Trans>)
                       .with(RecipientRole.APPROVER, () => <Trans>Approve</Trans>)
                       .with(RecipientRole.CC, () => <Trans>Mark as Viewed</Trans>)
                       .with(RecipientRole.ASSISTANT, () => <Trans>Complete</Trans>)

@@ -1,4 +1,13 @@
+import { createContext } from 'react';
 import { useRouteLoaderData } from 'react-router';
+
+/**
+ * The per-request CSP nonce, provided by entry.server.tsx around the whole render. The root
+ * loader also returns it, but an error the router raises before any loader runs (an unmatched
+ * path) renders the root Layout with no loader data; the Layout reads the nonce from here then.
+ * Server only: on the client the value is undefined, and nonce() drops it anyway.
+ */
+export const CspNonceContext = createContext<string | undefined>(undefined);
 
 /**
  * Returns the supplied CSP nonce only when rendering on the server.

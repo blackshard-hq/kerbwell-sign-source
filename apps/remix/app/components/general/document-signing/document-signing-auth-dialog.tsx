@@ -124,7 +124,6 @@ export const DocumentSigningAuthDialog = ({
                         .with(DocumentAuth.PASSKEY, () => <Trans>Passkey</Trans>)
                         .with(DocumentAuth.TWO_FACTOR_AUTH, () => <Trans>2FA</Trans>)
                         .with(DocumentAuth.PASSWORD, () => <Trans>Password</Trans>)
-                        .with(DocumentAuth.KERBWELL_GATE, () => <Trans>Kerbwell identity check</Trans>)
                         .exhaustive()}
                     </div>
 
@@ -134,7 +133,6 @@ export const DocumentSigningAuthDialog = ({
                         .with(DocumentAuth.PASSKEY, () => <Trans>Use your passkey for authentication</Trans>)
                         .with(DocumentAuth.TWO_FACTOR_AUTH, () => <Trans>Enter your 2FA code</Trans>)
                         .with(DocumentAuth.PASSWORD, () => <Trans>Enter your password</Trans>)
-                        .with(DocumentAuth.KERBWELL_GATE, () => <Trans>Confirmed when you opened your link</Trans>)
                         .exhaustive()}
                     </div>
                   </div>
@@ -172,8 +170,6 @@ export const DocumentSigningAuthDialog = ({
               />
             ))
             .with({ documentAuthType: DocumentAuth.EXPLICIT_NONE }, () => null)
-            // The gate cookie is the proof; there is nothing for the signer to enter here.
-            .with({ documentAuthType: DocumentAuth.KERBWELL_GATE }, () => null)
             .exhaustive()}
       </DialogContent>
     </Dialog>

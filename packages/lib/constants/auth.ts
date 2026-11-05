@@ -167,21 +167,8 @@ export const isDisposableEmail = (email: string, additionalBlockedDomains: strin
  * Check if signup is enabled for the given provider.
  * The master switch takes precedence over the per-provider flags.
  */
-/**
- * Kerbwell Sign admin lockdown (fork addition). NEXT_PUBLIC_KERBWELL_ADMIN_OIDC_ONLY='true' leaves
- * one way in: OIDC against Kerbwell Identity (NEXT_PRIVATE_OIDC_*), for an account holding the
- * kerbwell-sign-admin role that signed in with a passkey (packages/auth kerbwell-admin-oidc.ts).
- * Email and password sign-in, sign-up and reset, Google, Microsoft, organisation SSO and the
- * built-in passkey sign-in are all off. Public so the sign-in page renders the same answer.
- */
-export const isKerbwellAdminOidcOnly = (): boolean => env('NEXT_PUBLIC_KERBWELL_ADMIN_OIDC_ONLY') === 'true';
-
 export const isSignupEnabledForProvider = (provider: 'email' | 'google' | 'microsoft' | 'oidc'): boolean => {
   if (env('NEXT_PUBLIC_DISABLE_SIGNUP') === 'true') {
-    return false;
-  }
-
-  if (isKerbwellAdminOidcOnly() && provider !== 'oidc') {
     return false;
   }
 
@@ -201,10 +188,6 @@ export const isSignupEnabledForProvider = (provider: 'email' | 'google' | 'micro
  */
 export const isSigninEnabledForProvider = (provider: 'email' | 'google' | 'microsoft' | 'oidc'): boolean => {
   if (env('NEXT_PUBLIC_DISABLE_SIGNIN') === 'true') {
-    return false;
-  }
-
-  if (isKerbwellAdminOidcOnly() && provider !== 'oidc') {
     return false;
   }
 

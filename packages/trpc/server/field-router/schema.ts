@@ -8,7 +8,6 @@ import {
   ZFieldWidthSchema,
 } from '@documenso/lib/types/field';
 import { ZFieldAndMetaSchema, ZFieldMetaSchema } from '@documenso/lib/types/field-meta';
-import { ZKerbwellDrawnSignature } from '@documenso/lib/types/kerbwell-drawn-signature';
 import { FieldType } from '@prisma/client';
 import { z } from 'zod';
 
@@ -156,8 +155,6 @@ export const ZSignFieldWithTokenMutationSchema = z.object({
   value: z.string().trim().optional(),
   isBase64: z.boolean().optional(),
   authOptions: ZRecipientActionAuthSchema.optional(),
-  /** Kerbwell: the strokes of a drawn signature image, rendered server-side on agency agreements. */
-  kerbwellDrawn: ZKerbwellDrawnSignature.optional(),
 });
 
 export type TSignFieldWithTokenMutationSchema = z.infer<typeof ZSignFieldWithTokenMutationSchema>;

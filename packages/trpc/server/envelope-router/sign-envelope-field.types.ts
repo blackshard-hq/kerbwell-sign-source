@@ -1,6 +1,5 @@
 import { ZRecipientActionAuthSchema } from '@documenso/lib/types/document-auth';
 import { ZFieldSchema } from '@documenso/lib/types/field';
-import { ZKerbwellDrawnSignature } from '@documenso/lib/types/kerbwell-drawn-signature';
 import { FieldType } from '@documenso/prisma/client';
 import SignatureSchema from '@documenso/prisma/generated/zod/modelSchema/SignatureSchema';
 import { z } from 'zod';
@@ -53,8 +52,6 @@ export const ZSignEnvelopeFieldRequestSchema = z.object({
   fieldId: z.number(),
   fieldValue: ZSignEnvelopeFieldValue,
   authOptions: ZRecipientActionAuthSchema.optional(),
-  /** Kerbwell: the strokes of a drawn signature image, rendered server-side on agency agreements. */
-  kerbwellDrawn: ZKerbwellDrawnSignature.optional(),
 });
 
 export const ZSignEnvelopeFieldResponseSchema = z.object({

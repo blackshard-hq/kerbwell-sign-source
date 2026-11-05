@@ -1,8 +1,6 @@
 import { z } from 'zod';
 
 const ZOpenIdConfigurationSchema = z.object({
-  issuer: z.string().optional(),
-  jwks_uri: z.string().optional(),
   authorization_endpoint: z.string(),
   token_endpoint: z.string(),
   scopes_supported: z.array(z.string()).optional(),

@@ -198,7 +198,6 @@ export const createDocumentFromDirectTemplate = async ({
   const isAccessAuthValid = match(derivedRecipientAccessAuth.at(0))
     .with(DocumentAccessAuth.ACCOUNT, () => user && user?.email === directRecipientEmail)
     .with(DocumentAccessAuth.TWO_FACTOR_AUTH, () => false) // Not supported for direct templates
-    .with(DocumentAccessAuth.KERBWELL_GATE, () => false) // A direct link has no recipient to gate
     .with(undefined, () => true)
     .exhaustive();
 
@@ -269,8 +268,6 @@ export const createDocumentFromDirectTemplate = async ({
       const derivedRecipientActionAuth = await validateFieldAuth({
         documentAuthOptions: directTemplateEnvelope.authOptions,
         recipient: {
-          // The template's recipient: no gate session is ever bound to it, so KERBWELL_GATE fails closed.
-          id: directTemplateRecipient.id,
           authOptions: directTemplateRecipient.authOptions,
           email: directRecipientEmail,
           envelopeId: directTemplateEnvelope.id,

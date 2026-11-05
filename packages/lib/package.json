@@ -57,7 +57,6 @@
     "oslo": "^0.17.0",
     "p-map": "^7.0.4",
     "pg": "^8.16.3",
-    "perfect-freehand": "^1.2.2",
     "pino": "^9.14.0",
     "pino-pretty": "^13.1.2",
     "playwright": "1.56.1",

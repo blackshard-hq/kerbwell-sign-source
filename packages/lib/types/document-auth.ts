@@ -5,14 +5,7 @@ import { ZAuthenticationResponseJSONSchema } from './webauthn';
 /**
  * All the available types of document authentication options for both access and action.
  */
-export const ZDocumentAuthTypesSchema = z.enum([
-  'ACCOUNT',
-  'PASSKEY',
-  'TWO_FACTOR_AUTH',
-  'PASSWORD',
-  'EXPLICIT_NONE',
-  'KERBWELL_GATE',
-]);
+export const ZDocumentAuthTypesSchema = z.enum(['ACCOUNT', 'PASSKEY', 'TWO_FACTOR_AUTH', 'PASSWORD', 'EXPLICIT_NONE']);
 
 export const DocumentAuth = ZDocumentAuthTypesSchema.Enum;
 
@@ -22,16 +15,6 @@ const ZDocumentAuthAccountSchema = z.object({
 
 const ZDocumentAuthExplicitNoneSchema = z.object({
   type: z.literal(DocumentAuth.EXPLICIT_NONE),
-});
-
-/**
- * Kerbwell gate (fork addition, Kerbwell Sign). The recipient is admitted only with a signer
- * assertion from Kerbwell Identity, posted to /api/kerbwell/gate, which sets the gate cookie for
- * that one recipient (packages/lib/server-only/kerbwell-gate). The request carries no secret of its
- * own: the server reads the gate cookie from the request.
- */
-const ZDocumentAuthKerbwellGateSchema = z.object({
-  type: z.literal(DocumentAuth.KERBWELL_GATE),
 });
 
 const ZDocumentAuthPasskeySchema = z.object({
@@ -60,7 +43,6 @@ export const ZDocumentAuthMethodsSchema = z.discriminatedUnion('type', [
   ZDocumentAuthPasskeySchema,
   ZDocumentAuth2FASchema,
   ZDocumentAuthPasswordSchema,
-  ZDocumentAuthKerbwellGateSchema,
 ]);
 
 /**
@@ -71,10 +53,9 @@ export const ZDocumentAuthMethodsSchema = z.discriminatedUnion('type', [
 export const ZDocumentAccessAuthSchema = z.discriminatedUnion('type', [
   ZDocumentAuthAccountSchema,
   ZDocumentAuth2FASchema,
-  ZDocumentAuthKerbwellGateSchema,
 ]);
 export const ZDocumentAccessAuthTypesSchema = z
-  .enum([DocumentAuth.ACCOUNT, DocumentAuth.TWO_FACTOR_AUTH, DocumentAuth.KERBWELL_GATE])
+  .enum([DocumentAuth.ACCOUNT, DocumentAuth.TWO_FACTOR_AUTH])
   .describe('The type of authentication required for the recipient to access the document.');
 
 /**
@@ -87,16 +68,9 @@ export const ZDocumentActionAuthSchema = z.discriminatedUnion('type', [
   ZDocumentAuthPasskeySchema,
   ZDocumentAuth2FASchema,
   ZDocumentAuthPasswordSchema,
-  ZDocumentAuthKerbwellGateSchema,
 ]);
 export const ZDocumentActionAuthTypesSchema = z
-  .enum([
-    DocumentAuth.ACCOUNT,
-    DocumentAuth.PASSKEY,
-    DocumentAuth.TWO_FACTOR_AUTH,
-    DocumentAuth.PASSWORD,
-    DocumentAuth.KERBWELL_GATE,
-  ])
+  .enum([DocumentAuth.ACCOUNT, DocumentAuth.PASSKEY, DocumentAuth.TWO_FACTOR_AUTH, DocumentAuth.PASSWORD])
   .describe(
     'The type of authentication required for the recipient to sign the document. This field is restricted to Enterprise plan users only.',
   );
@@ -109,10 +83,9 @@ export const ZDocumentActionAuthTypesSchema = z
 export const ZRecipientAccessAuthSchema = z.discriminatedUnion('type', [
   ZDocumentAuthAccountSchema,
   ZDocumentAuth2FASchema,
-  ZDocumentAuthKerbwellGateSchema,
 ]);
 export const ZRecipientAccessAuthTypesSchema = z
-  .enum([DocumentAuth.ACCOUNT, DocumentAuth.TWO_FACTOR_AUTH, DocumentAuth.KERBWELL_GATE])
+  .enum([DocumentAuth.ACCOUNT, DocumentAuth.TWO_FACTOR_AUTH])
   .describe('The type of authentication required for the recipient to access the document.');
 
 /**
@@ -126,7 +99,6 @@ export const ZRecipientActionAuthSchema = z.discriminatedUnion('type', [
   ZDocumentAuth2FASchema,
   ZDocumentAuthPasswordSchema,
   ZDocumentAuthExplicitNoneSchema,
-  ZDocumentAuthKerbwellGateSchema,
 ]);
 export const ZRecipientActionAuthTypesSchema = z
   .enum([
@@ -135,7 +107,6 @@ export const ZRecipientActionAuthTypesSchema = z
     DocumentAuth.TWO_FACTOR_AUTH,
     DocumentAuth.PASSWORD,
     DocumentAuth.EXPLICIT_NONE,
-    DocumentAuth.KERBWELL_GATE,
   ])
   .describe('The type of authentication required for the recipient to sign the document.');
 

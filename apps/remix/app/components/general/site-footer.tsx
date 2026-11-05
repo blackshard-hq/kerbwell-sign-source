@@ -30,13 +30,13 @@ export const SiteFooter = ({ className }: SiteFooterProps) => {
           <>
             <p>Black Shard Pty Ltd, ABN 66 696 910 773. Level 35, 71 Eagle Street, Brisbane QLD 4000. 1800 370 270.</p>
 
-            <p className="md:whitespace-nowrap">
+            <p className="whitespace-nowrap">
               Software engineering and cybersecurity. SMB1001:2026 Gold certified.{' '}
               <a
                 href="https://blackshard.com.au"
                 target="_blank"
                 rel="noreferrer"
-                className="whitespace-nowrap text-foreground underline decoration-shard underline-offset-4 hover:opacity-70"
+                className="text-foreground underline decoration-shard underline-offset-4 hover:opacity-70"
               >
                 blackshard.com.au
               </a>
@@ -47,12 +47,12 @@ export const SiteFooter = ({ className }: SiteFooterProps) => {
           <>
             <p>{brandFooterText() ?? brandName()}</p>
 
-            <p className="md:whitespace-nowrap">
+            <p className="whitespace-nowrap">
               <a
                 href={brandUrl()}
                 target="_blank"
                 rel="noreferrer"
-                className="whitespace-nowrap text-foreground underline decoration-shard underline-offset-4 hover:opacity-70"
+                className="text-foreground underline decoration-shard underline-offset-4 hover:opacity-70"
               >
                 {brandUrlHost()}
               </a>

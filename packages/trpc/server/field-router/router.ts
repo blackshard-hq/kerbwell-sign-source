@@ -605,7 +605,7 @@ export const fieldRouter = router({
    */
   signFieldWithToken: procedure.input(ZSignFieldWithTokenMutationSchema).mutation(async ({ input, ctx }) => {
     try {
-      const { token, fieldId, value, isBase64, authOptions, kerbwellDrawn } = input;
+      const { token, fieldId, value, isBase64, authOptions } = input;
 
       ctx.logger.info({
         input: {
@@ -621,7 +621,6 @@ export const fieldRouter = router({
         userId: ctx.user?.id,
         authOptions,
         requestMetadata: ctx.metadata.requestMetadata,
-        kerbwellDrawn,
       });
     } catch (err) {
       // Log the error for debugging purposes.

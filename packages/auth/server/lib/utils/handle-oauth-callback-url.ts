@@ -2,14 +2,9 @@ import { NEXT_PUBLIC_WEBAPP_URL } from '@documenso/lib/constants/app';
 import {
   isDisposableEmail,
   isEmailDomainAllowedForSignup,
-  isKerbwellAdminOidcOnly,
   isSignupEnabledForProvider,
 } from '@documenso/lib/constants/auth';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
-import {
-  KerbwellAdminOidcError,
-  verifyKerbwellAdminIdToken,
-} from '@documenso/lib/server-only/kerbwell-gate/admin-oidc';
 import { getEmailBlocklistDomains } from '@documenso/lib/server-only/site-settings/get-email-blocklist-domains';
 import { onCreateUserHook } from '@documenso/lib/server-only/user/create-user';
 import { deletedServiceAccountEmail } from '@documenso/lib/server-only/user/service-accounts/deleted-account';
@@ -36,34 +31,10 @@ export const handleOAuthCallbackUrl = async (options: HandleOAuthCallbackUrlOpti
 
   const requestMeta = c.get('requestMetadata');
 
-  if (isKerbwellAdminOidcOnly() && clientOptions.id !== 'oidc') {
-    return c.text('FORBIDDEN', 403);
-  }
-
-  let validated: Awaited<ReturnType<typeof validateOauth>>;
-
-  try {
-    validated = await validateOauth({
-      c,
-      clientOptions,
-    });
-  } catch (err) {
-    // Kerbwell Sign admin: a token without the admin role or without a passkey sign-in goes back
-    // to the sign-in page with a reason, and no account or session is touched.
-    if (err instanceof KerbwellAdminOidcError) {
-      const errorUrl = new URL('/signin', NEXT_PUBLIC_WEBAPP_URL());
-
-      errorUrl.searchParams.set('error', AuthenticationErrorCode.KerbwellAdminRefused);
-
-      console.warn(`Kerbwell Sign admin sign-in refused: ${err.reason}`);
-
-      return c.redirect(errorUrl.toString(), 302);
-    }
-
-    throw err;
-  }
-
-  const { email, name, sub, accessToken, accessTokenExpiresAt, idToken, redirectPath } = validated;
+  const { email, name, sub, accessToken, accessTokenExpiresAt, idToken, redirectPath } = await validateOauth({
+    c,
+    clientOptions,
+  });
 
   if (email.toLowerCase() === legacyServiceAccountEmail() || email.toLowerCase() === deletedServiceAccountEmail()) {
     return c.text('FORBIDDEN', 403);
@@ -220,7 +191,7 @@ export const validateOauth = async (options: HandleOAuthCallbackUrlOptions) => {
     throw new AppError(AppErrorCode.NOT_SETUP);
   }
 
-  const { token_endpoint, issuer, jwks_uri } = await getOpenIdConfiguration(clientOptions.wellKnownUrl, {
+  const { token_endpoint } = await getOpenIdConfiguration(clientOptions.wellKnownUrl, {
     requiredScopes: clientOptions.scope,
   });
 
@@ -258,13 +229,8 @@ export const validateOauth = async (options: HandleOAuthCallbackUrlOptions) => {
   const accessTokenExpiresAt = tokens.accessTokenExpiresAt();
   const idToken = tokens.idToken();
 
-  // Kerbwell Sign admin: the id_token is verified against the provider's keys and must carry the
-  // admin role and a passkey amr (packages/lib server-only/kerbwell-gate/admin-oidc.ts).
-  const claims =
-    isKerbwellAdminOidcOnly() && clientOptions.id === 'oidc'
-      ? await verifyKerbwellAdminIdToken({ idToken, issuer, jwksUri: jwks_uri, clientId: clientOptions.clientId })
-      : // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-        (decodeIdToken(tokens.idToken()) as Record<string, unknown>);
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+  const claims = decodeIdToken(tokens.idToken()) as Record<string, unknown>;
 
   const email = claims.email;
   const name = claims.name;

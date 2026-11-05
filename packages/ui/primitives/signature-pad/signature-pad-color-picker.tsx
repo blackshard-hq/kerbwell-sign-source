@@ -17,7 +17,7 @@ export const SignaturePadColorPicker = ({
   return (
     <div className={cn('absolute top-2 right-2 text-foreground filter', className)}>
       <Select defaultValue={selectedColor} onValueChange={(value) => setSelectedColor(value)}>
-        <SelectTrigger className="h-11 w-auto min-w-11 border-none p-0.5" aria-label="Ink colour">
+        <SelectTrigger className="h-auto w-auto border-none p-0.5">
           <SelectValue placeholder="" />
         </SelectTrigger>
 

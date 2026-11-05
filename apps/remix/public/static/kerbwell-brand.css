@@ -1,0 +1,297 @@
+/*
+ * Kerbwell Sign: the brand stylesheet.
+ *
+ * Linked from the root layout only when BRAND_STYLESHEET_PATH names it, so an instance that
+ * sets no BRAND_* variable (the estate's own eSign) never loads it and renders as before.
+ * It is unlayered, so it wins over the @layer base theme in packages/ui/styles/theme.css
+ * without !important.
+ *
+ * Colour comes from the Kerbwell tokens (kit of 4 Nov 2026 with the Bitumen palette of 5 Nov
+ * 2026; packages/ui/src/tokens/kerbwell.css in the product repository). Tailwind here reads every semantic colour as hsl(var(--x)), so
+ * each one is the token's hex converted to an HSL triple, with the token named beside it.
+ * packages/lib/constants/brand-kerbwell.test.ts checks every triple against its hex and every
+ * text pair against its contrast floor (7:1 body text, 3:1 UI marks).
+ *
+ * THE ACCENT IS ONE BLOCK. Bitumen with line-marking yellow is the pick: on light pages text,
+ * links, the focus ring and the field-card edge are Bitumen and the yellow is the primary fill
+ * (Night label), the mark and the record nodes; on dark pages the yellow is the accent outright.
+ * The yellow is 1.43:1 on Paper, so it never sits bare on a light ground: the mark sits on a
+ * Night tile (the app icon's) and record nodes take a 1px Night edge (--kw-node-edge). A
+ * different pick replaces the --kw-accent-* lines and the HSL triples marked "accent", from the
+ * same steps of the token file's accent block. The lockup and mark SVGs beside this file carry
+ * the mark hex and are regenerated with it.
+ */
+
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/static/kerbwell-geist-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/static/kerbwell-geist-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/static/kerbwell-geist-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/static/kerbwell-geist-mono-400.woff2") format("woff2");
+}
+
+/*
+ * Values are packages/ui/src/tokens/kerbwell.css (Bitumen, 5 Nov 2026): the Paper light base
+ * (canvas surface, white overlays) and the warm Bitumen dark base. Mapping:
+ *   background = --surface, card and popover = --surface-overlay, muted = --surface-sunk,
+ *   secondary and accent (hover) = --surface-hover, border = --line, muted text = --muted,
+ *   primary = --brand with --brand-ink, ring = --focus, destructive = --critical, input =
+ *   --control-edge (Slate, 3:1 on every surface), record nodes = --brand-mark. The field-card
+ *   edge is the signing field's boundary and needs 3:1, so it is Bitumen on light pages and the
+ *   yellow mark on dark ones.
+ */
+:root,
+.dark-mode-disabled {
+  /* The accent, from the token file's accent block (Bitumen). */
+  --kw-accent-mark: #ffc21a; /* --kw-accent-mark, line 500: the drawn mark and record nodes, never text on light */
+  --kw-accent-text: #272622; /* --kw-accent-text, Bitumen: links and focus on light (12.13:1 on the worst surface) */
+  --kw-accent-fill: #ffc21a; /* --action, line 500: Night label 12.23:1 */
+  --kw-accent-fill-ink: #0b0a09; /* --action-ink, Night */
+  --kw-accent-fill-hover: #e6a800; /* --action-hover, line 600: Night label 9.39:1 */
+  --kw-accent-text-dark: #ffc21a; /* --kw-accent-text-dark, line 500 (8.85:1 on the worst dark surface) */
+  --kw-accent-ink-dark: #0b0a09; /* --kw-accent-ink-dark: label on the dark primary fill */
+  --kw-node-edge: #0b0a09; /* --brand-node-edge (light): a record node's 1px Night edge */
+  --kw-mark-tile: #0b0a09; /* --brand-mark-tile: the Night tile the mark sits on */
+
+  --font-sans: "Geist";
+  --font-display: "Geist";
+  --font-mono: "Geist Mono";
+
+  /* Semantic, light (Paper base). */
+  --background: 48 38.5% 97.5%; /* --surface #FBFAF6 */
+  --foreground: 30 10% 3.9%; /* --ink #0B0A09 */
+  --muted: 46.2 26.5% 90.4%; /* --surface-sunk #EDEAE0 */
+  --muted-foreground: 40 6.8% 26.1%; /* --muted #47443E: 9.29:1 on surface, 7.77:1 on hover */
+  --popover: 0 0% 100%; /* --surface-overlay #FFFFFF */
+  --popover-foreground: 30 10% 3.9%; /* --ink #0B0A09 */
+  --card: 0 0% 100%; /* --surface-overlay #FFFFFF */
+  --card-border: 44 16.5% 82.2%; /* --line #D9D5CA */
+  --card-border-tint: 255 194 26; /* rgb, accent mark #FFC21A, decorative glow */
+  --card-foreground: 30 10% 3.9%; /* --ink #0B0A09 */
+  --field-card: 0 0% 100%; /* white #FFFFFF */
+  --field-card-border: 48 6.8% 14.3%; /* Bitumen #272622: 15.14:1 on the field card (the yellow alone is 1.62:1) */
+  --field-card-foreground: 30 10% 3.9%; /* --ink #0B0A09 */
+  --widget: 46.2 26.5% 90.4%; /* --surface-sunk #EDEAE0 */
+  --widget-foreground: 30 10% 3.9%; /* --ink #0B0A09 */
+  --border: 44 16.5% 82.2%; /* --line, decorative #D9D5CA */
+  --input: 42.9 5.6% 49.4%; /* --control-edge, Slate #858177: 3.72:1 on surface */
+  --primary: 48 6.8% 14.3%; /* accent, --brand, Bitumen #272622 */
+  --primary-foreground: 44 100% 55.1%; /* --brand-ink, line-marking yellow #FFC21A: 9.36:1 */
+  --secondary: 46.2 22.8% 88.8%; /* --surface-hover #E9E6DC */
+  --secondary-foreground: 30 10% 3.9%; /* --ink #0B0A09 */
+  --accent: 46.2 22.8% 88.8%; /* --surface-hover #E9E6DC */
+  --accent-foreground: 30 10% 3.9%; /* --ink #0B0A09 */
+  --destructive: 1.7 62.6% 33.5%; /* --critical #8B2320 */
+  --destructive-foreground: 0 0% 100%; /* white #FFFFFF: 8.90:1 */
+  --ring: 48 6.8% 14.3%; /* accent, --focus, Bitumen #272622: 14.50:1 on surface */
+  --envelope-editor-background: 46.2 26.5% 90.4%; /* --surface-sunk #EDEAE0 */
+  --radius: 0.25rem; /* --kw-radius-btn 4px */
+}
+
+:root.dark:not(.dark-mode-disabled) {
+  --kw-node-edge: transparent; /* the yellow holds on dark grounds on its own */
+
+  /* Semantic, dark (warm Bitumen). */
+  --background: 40 9.1% 6.5%; /* --canvas #12110F */
+  --foreground: 45 35.3% 93.3%; /* --ink #F4F1E8 */
+  --muted: 48 6.8% 14.3%; /* --surface-overlay #272622 */
+  --muted-foreground: 42.9 10.6% 74.1%; /* --muted #C4C0B6: 7.89:1 on the worst dark surface */
+  --popover: 48 6.8% 14.3%; /* --surface-overlay #272622 */
+  --popover-foreground: 45 35.3% 93.3%; /* --ink #F4F1E8 */
+  --card: 45 7.7% 10.2%; /* --surface, Asphalt #1C1B18 */
+  --card-border: 42.9 6.9% 19.8%; /* --line, decorative #36342F */
+  --card-border-tint: 255 194 26; /* rgb, accent mark #FFC21A, decorative glow */
+  --card-foreground: 45 35.3% 93.3%; /* --ink #F4F1E8 */
+  --field-card: 45 7.7% 10.2%; /* --surface #1C1B18 */
+  --field-card-border: 44 100% 55.1%; /* accent, --brand-mark #FFC21A: 10.65:1 */
+  --field-card-foreground: 45 35.3% 93.3%; /* --ink #F4F1E8 */
+  --widget: 48 6.8% 14.3%; /* --surface-overlay #272622 */
+  --widget-foreground: 45 35.3% 93.3%; /* --ink #F4F1E8 */
+  --border: 42.9 6.9% 19.8%; /* --line #36342F */
+  --input: 42.9 5.6% 49.4%; /* --control-edge, Slate #858177: 4.86:1 on canvas */
+  --primary: 44 100% 55.1%; /* accent, --brand #FFC21A */
+  --primary-foreground: 30 10% 3.9%; /* --brand-ink #0B0A09: 12.23:1 */
+  --secondary: 40 7.3% 16.1%; /* --surface-hover #2C2A26 */
+  --secondary-foreground: 45 35.3% 93.3%; /* --ink #F4F1E8 */
+  --accent: 40 7.3% 16.1%; /* --surface-hover #2C2A26 */
+  --accent-foreground: 45 35.3% 93.3%; /* --ink #F4F1E8 */
+  --destructive: 4.8 89.2% 78.2%; /* --critical #F99E96 */
+  --destructive-foreground: 30 10% 3.9%; /* --ink #0B0A09: 9.76:1 */
+  --ring: 44 100% 55.1%; /* accent, --focus #FFC21A: 11.67:1 on canvas */
+  --envelope-editor-background: 40 9.1% 6.5%; /* --canvas #12110F */
+}
+
+body {
+  font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Display type is Geist 500, tracked in (kit: -2% to -3.5%). */
+.font-display {
+  font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+
+/* Muted text at reduced opacity drops below 7:1; hold it at the token. */
+.text-muted-foreground\/60,
+.text-muted-foreground\/70,
+.text-muted-foreground\/80 {
+  color: hsl(var(--muted-foreground));
+}
+
+/* Links that fade on hover would fall below 7:1; thicken the underline instead. */
+a.hover\:opacity-70:hover {
+  opacity: 1;
+  text-decoration-thickness: 2px;
+}
+
+/* The estate's cyan hairline accent becomes the Kerbwell accent. */
+.decoration-shard {
+  text-decoration-color: var(--kw-accent-text);
+}
+.bg-shard {
+  background-color: var(--kw-accent-mark);
+  box-shadow: inset 0 0 0 1px var(--kw-node-edge);
+}
+.group:hover .group-hover\:bg-shard {
+  background-color: var(--kw-accent-mark);
+}
+.group:hover .group-hover\:text-shard {
+  color: var(--kw-accent-text);
+}
+.group:hover .group-hover\:border-shard\/80 {
+  border-color: var(--kw-accent-text);
+}
+.dark .group:hover .group-hover\:text-shard {
+  color: var(--kw-accent-text-dark);
+}
+.dark .group:hover .group-hover\:border-shard\/80 {
+  border-color: var(--kw-accent-text-dark);
+}
+.dark .decoration-shard {
+  text-decoration-color: var(--kw-accent-text-dark);
+}
+.dark .bg-shard,
+.dark .group:hover .group-hover\:bg-shard {
+  background-color: var(--kw-accent-mark);
+}
+
+/*
+ * The sign-in rule (a 1px h-px bg-shard div under the heading) becomes the kit's record-node
+ * hairline: a 2px rule with an 8px accent square on each end.
+ */
+.bg-shard.h-px {
+  position: relative;
+  height: 2px;
+  background-color: hsl(var(--border));
+  box-shadow: none;
+}
+.bg-shard.h-px::before,
+.bg-shard.h-px::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  background-color: var(--kw-accent-mark);
+  box-shadow: inset 0 0 0 1px var(--kw-node-edge);
+}
+.bg-shard.h-px::before {
+  left: 0;
+}
+.bg-shard.h-px::after {
+  right: 0;
+}
+.dark .bg-shard.h-px {
+  background-color: hsl(var(--border));
+}
+.dark .bg-shard.h-px::before,
+.dark .bg-shard.h-px::after {
+  background-color: var(--kw-accent-mark);
+}
+
+/* Keyboard focus: a 2px accent ring with a 2px offset everywhere, including links. */
+a:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Kit label style: Geist Mono, uppercase, +6% tracking. */
+.kw-label {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 0.8125rem;
+  line-height: 1rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* The accent node before a label (kit: a 6px square marks a fact on the record). */
+.kw-node::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 0.5rem;
+  vertical-align: 0.1em;
+  background-color: var(--kw-accent-mark);
+  box-shadow: inset 0 0 0 1px var(--kw-node-edge);
+}
+.dark .kw-node::before {
+  background-color: var(--kw-accent-mark);
+}
+
+/* Error pages (root ErrorBoundary under a brand). */
+.kw-error-code {
+  color: hsl(var(--muted-foreground));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* Footer links: room between the site link and the source link. */
+footer a + a {
+  margin-left: 0.75rem;
+}
+
+/*
+ * The primary action: the product's action pair (--action, --action-ink in the token file),
+ * line-marking yellow with Night ink at 12.23:1, the same filled button as the Kerbwell apps and
+ * the site. --primary stays the text step (Bitumen on light), because Tailwind here also reads it
+ * as link and icon ink, so only the filled button takes the pair.
+ */
+.bg-primary.text-primary-foreground {
+  background-color: var(--kw-accent-fill);
+  color: var(--kw-accent-fill-ink);
+}
+.bg-primary.text-primary-foreground:hover {
+  background-color: var(--kw-accent-fill-hover);
+}

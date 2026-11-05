@@ -17,8 +17,6 @@ import * as build from './index.js';
 server.use(
   serveStatic({
     root: 'build/client',
-    // .br and .gz copies written at build time by .bin/precompress.mjs.
-    precompressed: true,
     onFound: (path, c) => {
       if (path.startsWith('build/client/assets')) {
         // Hard cache assets with hashed file names.

@@ -30,12 +30,6 @@ export type SignaturePadProps = Omit<HTMLAttributes<HTMLCanvasElement>, 'onChang
   uploadSignatureEnabled?: boolean;
   drawSignatureEnabled?: boolean;
 
-  /**
-   * The tab to open on when no tab already holds a signature. Kerbwell passes `text` when the
-   * signer's legal name is known, so the typed signature is ready to adopt with one tap.
-   */
-  defaultTab?: 'draw' | 'text' | 'image';
-
   onValidityChange?: (isValid: boolean) => void;
 };
 
@@ -47,7 +41,6 @@ export const SignaturePad = ({
   typedSignatureEnabled = true,
   uploadSignatureEnabled = true,
   drawSignatureEnabled = true,
-  defaultTab,
 }: SignaturePadProps) => {
   const [imageSignature, setImageSignature] = useState(isBase64Image(value) ? value : '');
   const [drawSignature, setDrawSignature] = useState(isBase64Image(value) ? value : '');
@@ -71,18 +64,6 @@ export const SignaturePad = ({
       }
 
       if (uploadSignatureEnabled && imageSignature) {
-        return 'image';
-      }
-
-      if (defaultTab === 'text' && typedSignatureEnabled) {
-        return 'text';
-      }
-
-      if (defaultTab === 'draw' && drawSignatureEnabled) {
-        return 'draw';
-      }
-
-      if (defaultTab === 'image' && uploadSignatureEnabled) {
         return 'image';
       }
 
@@ -163,7 +144,7 @@ export const SignaturePad = ({
       // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
       onValueChange={(value) => onTabChange(value as 'draw' | 'text' | 'image')}
     >
-      <TabsList aria-label="Signature method">
+      <TabsList>
         {drawSignatureEnabled && (
           <TabsTrigger value="draw">
             <SignatureIcon className="mr-2 size-4" />

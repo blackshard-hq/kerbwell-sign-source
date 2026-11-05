@@ -12,7 +12,6 @@
   "keywords": [],
   "author": "",
   "devDependencies": {
-    "@axe-core/playwright": "4.10.2",
     "@documenso/lib": "*",
     "@documenso/prisma": "*",
     "@napi-rs/canvas": "^0.1.83",

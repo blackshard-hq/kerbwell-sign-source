@@ -62,10 +62,6 @@ export const ZDocumentAuditLogTypeSchema = z.enum([
   'DOCUMENT_RECIPIENT_CSC_SIGN_REQUESTED', // Recipient clicked Sign; CSC session created with captured per-item hashes.
   'DOCUMENT_RECIPIENT_CSC_AUTHORIZED', // Credential-scope OAuth complete; SAD attached to the CSC session.
   'DOCUMENT_RECIPIENT_CSC_SIGNED', // TSP returned signatures and they were embedded into the recipient's PDF bytes.
-
-  // Kerbwell gate events (fork addition, Kerbwell Sign).
-  'KERBWELL_IDENTITY_VERIFIED', // Kerbwell Identity verified the recipient and the gate accepted its assertion.
-  'KERBWELL_CONSENT_GIVEN', // The recipient agreed to sign electronically, on the consent wording named by version and hash.
 ]);
 
 export const ZDocumentAuditLogEmailTypeSchema = z.enum([
@@ -821,42 +817,6 @@ export const ZDocumentAuditLogEventDocumentRecipientCscSignedSchema = z.object({
   }),
 });
 
-/**
- * Event: Kerbwell Identity verified the recipient (fork addition, Kerbwell Sign). Carries every
- * identity claim of the accepted signer assertion. `singleFactor` is true for acr
- * kw-sign-l1-single, where the link and the code reached the same channel.
- */
-export const ZDocumentAuditLogEventKerbwellIdentityVerifiedSchema = z.object({
-  type: z.literal(DOCUMENT_AUDIT_LOG_TYPE.KERBWELL_IDENTITY_VERIFIED),
-  data: ZBaseRecipientDataSchema.extend({
-    acr: z.string(),
-    amr: z.array(z.string()),
-    singleFactor: z.boolean(),
-    assuranceLabel: z.string(),
-    authTime: z.coerce.date(),
-    idvReference: z.string().nullable(),
-    assertionId: z.string(),
-    docKind: z.string(),
-    mode: z.string().nullable(),
-    verifiedIpAddress: z.string().nullable(),
-    verifiedUserAgent: z.string().nullable(),
-    cfCity: z.string().nullable(),
-    reauthentication: z.boolean(),
-  }),
-});
-
-/**
- * Event: the recipient gave consent to sign electronically (fork addition, Kerbwell Sign).
- */
-export const ZDocumentAuditLogEventKerbwellConsentGivenSchema = z.object({
-  type: z.literal(DOCUMENT_AUDIT_LOG_TYPE.KERBWELL_CONSENT_GIVEN),
-  data: ZBaseRecipientDataSchema.extend({
-    consentVersion: z.string(),
-    consentHash: z.string(),
-    assertionId: z.string(),
-  }),
-});
-
 export const ZDocumentAuditLogBaseSchema = z.object({
   id: z.string(),
   createdAt: z.date(),
@@ -911,8 +871,6 @@ export const ZDocumentAuditLogSchema = ZDocumentAuditLogBaseSchema.and(
     ZDocumentAuditLogEventDocumentRecipientCscSignRequestedSchema,
     ZDocumentAuditLogEventDocumentRecipientCscAuthorizedSchema,
     ZDocumentAuditLogEventDocumentRecipientCscSignedSchema,
-    ZDocumentAuditLogEventKerbwellIdentityVerifiedSchema,
-    ZDocumentAuditLogEventKerbwellConsentGivenSchema,
   ]),
 );
 

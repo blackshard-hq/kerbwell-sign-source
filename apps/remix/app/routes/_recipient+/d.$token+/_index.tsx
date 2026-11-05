@@ -63,8 +63,6 @@ const handleV1Loader = async ({ params, request }: Route.LoaderArgs) => {
     match(auth)
       .with(DocumentAccessAuth.ACCOUNT, () => Boolean(session.user))
       .with(DocumentAccessAuth.TWO_FACTOR_AUTH, () => true)
-      // A direct link has no recipient to hold a Kerbwell gate session.
-      .with(DocumentAccessAuth.KERBWELL_GATE, () => false)
       .exhaustive(),
   );
 
