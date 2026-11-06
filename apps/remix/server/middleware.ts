@@ -79,6 +79,10 @@ export const LOCKED_API_PATH_REGEX = /^\/api\/(v1|v2|v2-beta)(\/|$)/i;
 
 const EDGE_HEADERS = ['cf-ray', 'cf-connecting-ip', 'cdn-loop'];
 
+/** True when the request came through the public edge (it carries a Cloudflare header). */
+export const isFromPublicEdge = (headers: { get(name: string): string | null | undefined }): boolean =>
+  EDGE_HEADERS.some((name) => headers.get(name));
+
 export const parseInternalApiHosts = (raw: string | undefined): Set<string> => {
   const hosts = new Set<string>();
 
@@ -118,7 +122,7 @@ export const isApiRequestRefused = (options: {
     return false;
   }
 
-  if (EDGE_HEADERS.some((name) => headers.get(name))) {
+  if (isFromPublicEdge(headers)) {
     return true;
   }
 

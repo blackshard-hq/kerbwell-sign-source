@@ -34,11 +34,66 @@ run from `/app/apps/remix` against the same Postgres database.
 | `BRAND_FOOTER_TEXT` | the footer line, e.g. `Kerbwell` | no |
 | `BRAND_SOURCE_URL` | leave unset: the image carries its own (see "Corresponding source" below). A value here overrides the image's and can point at the wrong build | no |
 | `NEXT_PRIVATE_INTERNAL_API_HOSTS` | the app's internal FQDN, e.g. `kerbwell-esign.internal.<env-domain>`, comma separated if more than one. When set, `/api/v1`, `/api/v2` and `/api/v2-beta` return 404 unless the request's Host is listed, and to any request that carries a Cloudflare edge header (`cf-ray`, `cf-connecting-ip`, `cdn-loop`) whatever its Host. `/api/health`, `/api/auth`, `/api/trpc`, the gate and every page stay public. Unset, the lock is off (upstream behaviour) | no |
+| `KERBWELL_PUBLIC_SIGNIN_REDIRECT` | `https://app.kerbwell.com.au`: no public sign-in or dashboard (see "Public surface lock" below). Every page outside the signer, embed and platform paths answers 302 to this URL on a public host. A value that is not an absolute http(s) URL keeps the lock on and answers 404. Unset, the lock is off (upstream behaviour; the estate instance leaves it unset) | no |
 | `NEXT_PRIVATE_WEBHOOK_LEGACY_SECRET_HEADER` | `false` once every receiver verifies `X-Kerbwell-Signature`. Anything else (including unset) also sends the upstream `X-Documenso-Secret` header, which carries the secret in clear | no |
 | `NEXT_PRIVATE_WEBHOOK_SSRF_BYPASS_HOSTS` | the staff app's internal FQDN, when the webhook targets it: an internal FQDN resolves to a private address, which the webhook SSRF guard refuses unless the host is listed here. List only that host | no |
 | `BRAND_SECURITY_CONTACT`, `BRAND_SECURITY_POLICY`, `BRAND_SECURITY_EXPIRES` | the security.txt fields; with a brand set, Contact defaults to `mailto:` the support mailbox and Policy is omitted when unset | no |
 
 `/.well-known/security.txt` and `/site.webmanifest` are served from these values.
+
+## Public surface lock
+
+`sign.kerbwell.com.au` has one account, the platform administrator. Staff work in
+`app.kerbwell.com.au`, which drives this instance through the API; signers arrive on signing links
+or through the client portal embed. With `KERBWELL_PUBLIC_SIGNIN_REDIRECT` set
+(`apps/remix/server/public-surface-lock.ts`), a request on a public host answers 302 to that URL
+(with `Cache-Control: no-store`, any method) unless its path is one of these, which behave as
+before:
+
+| Path | Why it stays open |
+|---|---|
+| `/sign/*`, `/d/*` | signing links and direct template links |
+| `/embed/*` | the client portal embed (signing and authoring) |
+| `/share/*`, `/report/*`, `/articles/*` | shared completed documents, the recipient report link, the signature disclosure linked from the signing page |
+| `/__htmltopdf/*` | the certificate and audit-log render the app calls on itself while sealing |
+| `/api/*` | everything under it, including `/api/auth`, `/api/trpc`, `/api/health` and the Kerbwell gate. The document API keeps its own lock (`NEXT_PRIVATE_INTERNAL_API_HOSTS`, above) |
+| `/assets/*`, `/__manifest`, `/static/*`, `/fonts/*` | the built client, route discovery, the brand files and fonts |
+| `/.well-known/*`, `/site.webmanifest`, `/favicon*`, `/apple-*`, `/android-chrome-*`, `/robots.txt`, `/opengraph-image.jpg` | security.txt, the manifest and the icons |
+
+Everything else redirects: `/`, `/signin`, `/signup`, `/forgot-password`, `/reset-password`,
+`/check-email`, `/verify-email`, `/o/*/signin`, the organisation invite pages, `/inbox`,
+`/dashboard`, `/t/*`, `/o/*`, `/settings/*`, `/admin/*`, public profiles and any unknown path.
+The list is of what stays open, so a route upstream adds later is closed until it is named in
+`PUBLIC_PATH_REGEX`. Matching is case-sensitive (`/SignIn` redirects). The footer's source link
+is an absolute URL on the public mirror and every page that shows the footer (signing,
+completion) is open, so the AGPL-3.0 section 13 link is unaffected.
+
+A request whose Host is one of `NEXT_PRIVATE_INTERNAL_API_HOSTS` and that carries no Cloudflare
+edge header passes untouched, the same rule as the API lock. Kerbwell production does not set
+`NEXT_PRIVATE_INTERNAL_API_HOSTS` (the staff app calls the API on `https://sign.kerbwell.com.au`),
+and the internal FQDN answers only inside the Container Apps environment (the public ingress
+returns 404 for it), so no browser reaches the dashboard that way.
+
+Administrator access. The administrator signs in through a short window with the lock off, as a
+root change through bs-rootq on Kane's go:
+
+    bs-az containerapp update -g kerbwell-prod-rg -n kerbwell-esign --remove-env-vars KERBWELL_PUBLIC_SIGNIN_REDIRECT
+    # sign in at https://sign.kerbwell.com.au/signin, do the admin work, sign out
+    bs-az containerapp update -g kerbwell-prod-rg -n kerbwell-esign --set-env-vars KERBWELL_PUBLIC_SIGNIN_REDIRECT=https://app.kerbwell.com.au
+    curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' https://sign.kerbwell.com.au/signin   # 302 https://app.kerbwell.com.au/
+
+Sign-up stays disabled and the password reset refused during the window
+(`NEXT_PUBLIC_DISABLE_SIGNUP`, `NEXT_PUBLIC_DISABLE_PASSWORD_RESET`). Most administration needs no
+window: organisation settings, branding, the webhook and the API token are set by rerunning the
+bootstrap job, and the administrator password is reset the same way. `bs-az containerapp exec`
+gives a shell in the container, not a browser, and Container Apps has no port forward. No IP
+allowlist or other exception is added for the administrator.
+
+`npx vitest run server/public-surface-lock.test.ts` (in `apps/remix`) covers the redirected and
+open paths, the internal host, the edge header, an invalid value and the lock being off. CI also
+starts a second app from the image with the lock on and runs
+`packages/app-tests/e2e/kerbwell-surface-lock` against it, which creates and sends an envelope
+through the internal API and opens its signing link on the public host in a browser.
 
 ## Brand
 
@@ -145,7 +200,7 @@ job against it and runs `packages/app-tests/e2e/kerbwell-platform` (Playwright, 
 `/api/v1`, `/api/v2`, `/api/v2-beta` and the OpenAPI document return 404 on `localhost` even with
 a valid token, `/api/v2/envelope` returns 200 on `127.0.0.1` with the bootstrap token, any
 request carrying a Cloudflare edge header returns 404, and `/api/health` and `/signin` stay
-public. A skipped test fails the job. To run it locally, start the app the same way and set
+public (this app runs with `KERBWELL_PUBLIC_SIGNIN_REDIRECT` unset). A skipped test fails the job. To run it locally, start the app the same way and set
 `KERBWELL_E2E_INTERNAL_URL=http://127.0.0.1:3000`, `KERBWELL_E2E_PUBLIC_URL=http://localhost:3000`
 and `KERBWELL_E2E_API_TOKEN`.
 

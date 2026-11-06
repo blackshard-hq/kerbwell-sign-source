@@ -9,9 +9,10 @@ name: 'Kerbwell source and platform'
 # tag that answers 200 anonymously (docker/kerbwell-source-gate.mjs), so no other build route
 # can ship an image without public source.
 #
-# The platform tests run on every pull request: the timestamped webhook signature and host-lock
-# unit tests, then the built image itself (the bootstrap on a fresh database, and the
-# Playwright host-lock spec against the running app with the lock on).
+# The platform tests run on every pull request: the timestamped webhook signature, host-lock and
+# public-surface-lock unit tests, then the built image itself (the bootstrap on a fresh database,
+# the Playwright host-lock spec against the running app with the lock on, and the surface-lock
+# spec against a second app with KERBWELL_PUBLIC_SIGNIN_REDIRECT set).
 
 on:
   pull_request:
@@ -48,6 +49,10 @@ jobs:
 
       - name: Internal API host lock
         run: npx vitest run server/middleware.test.ts
+        working-directory: apps/remix
+
+      - name: Public surface lock
+        run: npx vitest run server/public-surface-lock.test.ts
         working-directory: apps/remix
 
       - name: Source gate logic
@@ -127,6 +132,21 @@ jobs:
             -e KERBWELL_ESIGN_WEBHOOK_URL -e KERBWELL_ESIGN_WEBHOOK_SECRET \
             --entrypoint node kerbwell-esign:ci kerbwell-bootstrap.mjs
           echo "KERBWELL_E2E_API_TOKEN=${token}" >> "$GITHUB_ENV"
+          # A second app on port 3001 from the same image and database with the public surface
+          # lock on (KERBWELL_PUBLIC_SIGNIN_REDIRECT): the lock spec runs against it.
+          NEXT_PUBLIC_WEBAPP_URL='http://localhost:3001' PORT=3001 \
+          KERBWELL_PUBLIC_SIGNIN_REDIRECT='https://app.kerbwell.example' \
+          docker run -d --name kw-app-lock --network host \
+            -e NEXT_PRIVATE_DATABASE_URL -e NEXT_PRIVATE_DIRECT_DATABASE_URL -e NEXTAUTH_SECRET \
+            -e NEXT_PRIVATE_ENCRYPTION_KEY -e NEXT_PRIVATE_ENCRYPTION_SECONDARY_KEY \
+            -e NEXT_PUBLIC_WEBAPP_URL -e NEXT_PUBLIC_UPLOAD_TRANSPORT -e NEXT_PRIVATE_INTERNAL_API_HOSTS \
+            -e PORT -e KERBWELL_PUBLIC_SIGNIN_REDIRECT \
+            kerbwell-esign:ci >/dev/null
+          for i in $(seq 1 120); do
+            [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3001/api/health)" = 200 ] && break
+            [ "$i" = 120 ] && { docker logs kw-app-lock | tail -60; echo "::error::the locked app did not answer /api/health"; exit 1; }
+            sleep 2
+          done
           # The running container keeps its image; the build cache is not needed again.
           docker buildx prune -af >/dev/null
           df -h / | tail -1
@@ -145,9 +165,24 @@ jobs:
           grep -qE '[0-9]+ passed' pw.log
           if grep -qE '[0-9]+ (skipped|failed)' pw.log; then echo "::error::a host-lock test was skipped or failed"; exit 1; fi
 
+      - name: Playwright public surface lock spec
+        working-directory: packages/app-tests
+        env:
+          KERBWELL_E2E_SIGNIN_REDIRECT: 'https://app.kerbwell.example'
+          KERBWELL_E2E_INTERNAL_URL: 'http://127.0.0.1:3001'
+          KERBWELL_E2E_PUBLIC_URL: 'http://localhost:3001'
+          NEXT_PUBLIC_WEBAPP_URL: 'http://localhost:3001'
+        run: |
+          NODE_OPTIONS='--import tsx' npx playwright test e2e/kerbwell-surface-lock \
+            --project ui --retries 0 --reporter list | tee pw-lock.log
+          grep -qE '[0-9]+ passed' pw-lock.log
+          if grep -qE '[0-9]+ (skipped|failed)' pw-lock.log; then echo "::error::a surface-lock test was skipped or failed"; exit 1; fi
+
       - name: App log on failure
         if: failure()
-        run: docker logs kw-app 2>&1 | tail -80 || true
+        run: |
+          docker logs kw-app 2>&1 | tail -80 || true
+          docker logs kw-app-lock 2>&1 | tail -80 || true
 
   source_check_negative:
     name: Source check refuses a private commit

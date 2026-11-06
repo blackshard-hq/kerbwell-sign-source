@@ -30,6 +30,7 @@ import { downloadRoute } from './api/download/download';
 import { filesRoute } from './api/files/files';
 import { type AppContext, appContext } from './context';
 import { appMiddleware, internalApiHostLock } from './middleware';
+import { publicSurfaceLock } from './public-surface-lock';
 import { securityHeadersMiddleware } from './security-headers';
 import { openApiTrpcServerHandler } from './trpc/hono-trpc-open-api';
 import { reactRouterTrpcServer } from './trpc/hono-trpc-remix';
@@ -72,6 +73,13 @@ app.use(appContext);
  * carries the header.
  */
 app.use(securityHeadersMiddleware);
+
+/**
+ * Kerbwell: no public sign-in or dashboard when KERBWELL_PUBLIC_SIGNIN_REDIRECT is set
+ * (public-surface-lock.ts). Runs after the security headers so the redirect carries HSTS, and
+ * before any page or session work.
+ */
+app.use('*', publicSurfaceLock);
 
 /**
  * RR7 app middleware.
