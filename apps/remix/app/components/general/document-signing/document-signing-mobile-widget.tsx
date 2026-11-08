@@ -1,7 +1,7 @@
+import { mapSecondaryIdToDocumentId } from '@documenso/lib/utils/envelope';
 import { Button } from '@documenso/ui/primitives/button';
-
 import { Plural, Trans } from '@lingui/react/macro';
-import { RecipientRole } from '@prisma/client';
+import { EnvelopeType, RecipientRole } from '@prisma/client';
 import { motion } from 'framer-motion';
 import { LucideChevronDown, LucideChevronUp } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -13,13 +13,15 @@ import { BrandingLogo } from '../branding-logo';
 import EnvelopeSignerForm from '../envelope-signing/envelope-signer-form';
 import { EnvelopeSignerCompleteDialog } from '../envelope-signing/envelope-signing-complete-dialog';
 import { useRequiredEnvelopeSigningContext } from './envelope-signing-provider';
+import { KerbwellSomethingWrong } from './kerbwell-something-wrong';
 
 export const DocumentSigningMobileWidget = () => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const { hidePoweredBy = true } = useEmbedSigningContext() || {};
 
-  const { recipientFieldsRemaining, recipient, requiredRecipientFields } = useRequiredEnvelopeSigningContext();
+  const { recipientFieldsRemaining, recipient, requiredRecipientFields, envelope, isDirectTemplate } =
+    useRequiredEnvelopeSigningContext();
 
   /**
    * Pre open the widget for assistants to let them know it's there.
@@ -42,8 +44,9 @@ export const DocumentSigningMobileWidget = () => {
                   <Button
                     variant="outline"
                     onClick={() => setIsExpanded(!isExpanded)}
-                    className="flex h-8 w-8 items-center justify-center"
-                    aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                    className="flex h-11 w-11 items-center justify-center"
+                    aria-label={isExpanded ? 'Hide signing details' : 'Show signing details'}
+                    aria-expanded={isExpanded}
                   >
                     {isExpanded ? (
                       <LucideChevronDown className="h-5 w-5 flex-shrink-0 text-muted-foreground" />
@@ -101,6 +104,17 @@ export const DocumentSigningMobileWidget = () => {
                   }}
                 />
               </div>
+            </div>
+          )}
+
+          {!isDirectTemplate && envelope.type === EnvelopeType.DOCUMENT && (
+            <div className="flex justify-end px-4 pb-3">
+              <KerbwellSomethingWrong
+                variant="button"
+                documentId={mapSecondaryIdToDocumentId(envelope.secondaryId)}
+                documentTitle={envelope.title}
+                token={recipient.token}
+              />
             </div>
           )}
 

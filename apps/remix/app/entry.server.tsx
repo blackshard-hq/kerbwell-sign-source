@@ -10,7 +10,6 @@ import type { AppLoadContext, EntryContext } from 'react-router';
 import { ServerRouter } from 'react-router';
 
 import { langCookie } from './storage/lang-cookie.server';
-import { CspNonceContext } from './utils/nonce';
 
 export const streamTimeout = 5_000;
 
@@ -46,9 +45,7 @@ export default async function handleRequest(
 
     const { pipe, abort } = renderToPipeableStream(
       <I18nProvider i18n={i18n}>
-        <CspNonceContext.Provider value={nonce}>
-          <ServerRouter context={routerContext} url={request.url} nonce={nonce} />
-        </CspNonceContext.Provider>
+        <ServerRouter context={routerContext} url={request.url} nonce={nonce} />
       </I18nProvider>,
       {
         nonce,

@@ -153,6 +153,7 @@ export default function SigningCertificate({ loaderData }: Route.ComponentProps)
       .with('PASSWORD', () => _(msg`Password Re-Authentication`))
       .with('PASSKEY', () => _(msg`Passkey Re-Authentication`))
       .with('EXPLICIT_NONE', () => _(msg`Email`))
+      .with('KERBWELL_GATE', () => _(msg`Kerbwell identity check`))
       .with(undefined, () => null)
       .exhaustive();
 
@@ -162,6 +163,7 @@ export default function SigningCertificate({ loaderData }: Route.ComponentProps)
       authLevel = match(accessAuthMethod)
         .with('ACCOUNT', () => _(msg`Account Authentication`))
         .with('TWO_FACTOR_AUTH', () => _(msg`Two-Factor Authentication`))
+        .with('KERBWELL_GATE', () => _(msg`Kerbwell identity check`))
         .with(undefined, () => _(msg`Email`))
         .exhaustive();
     }

@@ -1,5 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="9 7.5 33 33" width="300" height="300" role="img" aria-label="Kerbwell">
-<title>Kerbwell</title>
-<!-- Kerbwell brand kit, 4 Nov 2026, Bitumen palette of 5 Nov 2026: the drawn mark (a K cut from a kerb-and-channel section) in line-marking yellow, bare, on dark backgrounds (11.67:1 on the dark canvas). Glyph box 9 9 33 30, centred in a square. -->
-<path fill="#FFC21A" d="M9 9H18V39H9Z M21 18L30 9H39L27 21Z M21 24H27L36 33H42V39H21Z"/>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="300" height="300">
+  <title>Kerbwell symbol</title>
+  <desc>The K of the Kerbwell wordmark, white on dark backgrounds.</desc>
+  <path fill="#FFFFFF" transform="translate(28.409 264.000) scale(0.326648)" d="M505.88494873046875 0.0 307.020751953125 -315.50433349609375 213.660888671875 -205.50433349609375V0.0H81.7197265625V-698.0H213.660888671875V-485.36590576171875V-354.49566650390625H218.77593994140625L318.0709228515625 -485.36590576171875L491 -698H642.6461791992188L400.2716064453125 -407.460205078125L662.76123046875 0.0Z"/>
 </svg>

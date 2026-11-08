@@ -5,13 +5,16 @@ import { RadioGroup, RadioGroupItem } from '@documenso/ui/primitives/radio-group
 import { SignaturePadDialog } from '@documenso/ui/primitives/signature-pad/signature-pad-dialog';
 import { Plural, Trans } from '@lingui/react/macro';
 import { RecipientRole } from '@prisma/client';
-import { useMemo } from 'react';
+import { useId, useMemo } from 'react';
 
 import { useEmbedSigningContext } from '~/components/embed/embed-signing-context';
-
+import { isKerbwellUploadAllowed, useKerbwellGateSigning } from '~/components/general/kerbwell/gate-signing-context';
 import { useRequiredEnvelopeSigningContext } from '../document-signing/envelope-signing-provider';
 
 export default function EnvelopeSignerForm() {
+  const kerbwellGate = useKerbwellGateSigning();
+  // The form renders twice (desktop sidebar and phone bar), so its ids must differ.
+  const fullNameId = useId();
   const {
     fullName,
     signature,
@@ -92,13 +95,13 @@ export default function EnvelopeSignerForm() {
     <fieldset disabled={isSubmitting} className="flex flex-1 flex-col gap-4">
       <div className="flex flex-1 flex-col gap-y-4">
         <div>
-          <Label htmlFor="full-name">
+          <Label htmlFor={fullNameId}>
             <Trans>Full Name</Trans>
           </Label>
 
           <Input
             type="text"
-            id="full-name"
+            id={fullNameId}
             className="mt-2 bg-background"
             value={fullName}
             disabled={isNameLocked}
@@ -119,8 +122,12 @@ export default function EnvelopeSignerForm() {
               value={signature ?? ''}
               onChange={(v) => setSignature(v ?? '')}
               typedSignatureEnabled={envelope.documentMeta.typedSignatureEnabled}
-              uploadSignatureEnabled={envelope.documentMeta.uploadSignatureEnabled}
+              uploadSignatureEnabled={isKerbwellUploadAllowed(
+                kerbwellGate,
+                envelope.documentMeta.uploadSignatureEnabled,
+              )}
               drawSignatureEnabled={envelope.documentMeta.drawSignatureEnabled}
+              defaultTab={kerbwellGate?.legalName ? 'text' : undefined}
             />
           </div>
         )}

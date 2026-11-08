@@ -30,122 +30,23 @@ run from `/app/apps/remix` against the same Postgres database.
 | `BRAND_LOGO_PATH`, `BRAND_LOGO_DARK_PATH` | `/static/kerbwell-primary-light.svg`, `/static/kerbwell-primary-dark.svg` | no |
 | `BRAND_MARK_PATH`, `BRAND_MARK_DARK_PATH` | `/static/kerbwell-mark-light.svg`, `/static/kerbwell-mark-dark.svg` | no |
 | `BRAND_EMAIL_LOGO_PATH` | `/static/kerbwell-logo.png` | no |
-| `BRAND_STYLESHEET_PATH` | `/static/kerbwell-brand.css`: Geist, the Kerbwell colour tokens and the error page styles, linked after the app's own stylesheet. Only a same-origin `.css` path is accepted; unset links nothing | no |
 | `BRAND_FOOTER_TEXT` | the footer line, e.g. `Kerbwell` | no |
 | `BRAND_SOURCE_URL` | leave unset: the image carries its own (see "Corresponding source" below). A value here overrides the image's and can point at the wrong build | no |
 | `NEXT_PRIVATE_INTERNAL_API_HOSTS` | the app's internal FQDN, e.g. `kerbwell-esign.internal.<env-domain>`, comma separated if more than one. When set, `/api/v1`, `/api/v2` and `/api/v2-beta` return 404 unless the request's Host is listed, and to any request that carries a Cloudflare edge header (`cf-ray`, `cf-connecting-ip`, `cdn-loop`) whatever its Host. `/api/health`, `/api/auth`, `/api/trpc`, the gate and every page stay public. Unset, the lock is off (upstream behaviour) | no |
-| `KERBWELL_PUBLIC_SIGNIN_REDIRECT` | `https://app.kerbwell.com.au`: no public sign-in or dashboard (see "Public surface lock" below). Every page outside the signer, embed and platform paths answers 302 to this URL on a public host. A value that is not an absolute http(s) URL keeps the lock on and answers 404. Unset, the lock is off (upstream behaviour; the estate instance leaves it unset) | no |
 | `NEXT_PRIVATE_WEBHOOK_LEGACY_SECRET_HEADER` | `false` once every receiver verifies `X-Kerbwell-Signature`. Anything else (including unset) also sends the upstream `X-Documenso-Secret` header, which carries the secret in clear | no |
 | `NEXT_PRIVATE_WEBHOOK_SSRF_BYPASS_HOSTS` | the staff app's internal FQDN, when the webhook targets it: an internal FQDN resolves to a private address, which the webhook SSRF guard refuses unless the host is listed here. List only that host | no |
+| `NEXT_PRIVATE_KERBWELL_GATE_ISSUER` | `https://auth.kerbwell.com.au`. Turns the Kerbwell gate on (see "Kerbwell gate" below). Unset, the gate is off and a token opens its document, as upstream | no |
+| `NEXT_PRIVATE_KERBWELL_GATE_MODE` | unset (`all`): every recipient needs the gate. `recipient` gates only recipients whose access or action auth names `KERBWELL_GATE`; `off` turns it off | no |
+| `NEXT_PRIVATE_KERBWELL_GATE_JWKS_URL`, `_AUDIENCE`, `_REAUTH_URL`, `_MAX_AUTH_AGE` | unset: `<issuer>/jwks`, `sign`, `<issuer>/signer`, `900`. The JWKS and re-auth URLs must be on the issuer's origin; the age is 60 to 900 seconds | no |
+| `NEXT_PRIVATE_KERBWELL_GATE_ACTIONS_URL` | the portal page behind "Something wrong?", e.g. `https://vendor.kerbwell.com.au/s/actions` (see "Signer UI" below). Unset: Ask the agent mails the agent, Decline uses the fork's own decline, and Wrong person and Request paper show a notice that signing is paused, without declining | no |
+| `NEXT_PRIVATE_KERBWELL_GATE_PASSKEY_URL` | unset: `<issuer>/signer/passkey`, the passkey offer on the done page. Must be on the issuer origin | no |
+| `NEXT_PRIVATE_CSP_SIGN_FRAME_ANCESTORS` | `https://client.kerbwell.com.au`: the only site that may frame `/sign` and `/d` (with `'self'`). With the gate on and this unset, they can be framed by this origin only | no |
+| `NEXT_PUBLIC_KERBWELL_ADMIN_OIDC_ONLY` | `true`: the admin UI is reached only by OIDC against Kerbwell Identity, for the `kerbwell-sign-admin` role with a passkey amr (see "Admin sign-in" below) | no |
+| `NEXT_PRIVATE_OIDC_WELL_KNOWN`, `NEXT_PRIVATE_OIDC_CLIENT_ID`, `NEXT_PRIVATE_OIDC_CLIENT_SECRET`, `NEXT_PRIVATE_OIDC_PROVIDER_LABEL` | `https://auth.kerbwell.com.au/.well-known/openid-configuration`, the `kerbwell-sign` client, its secret (Key Vault reference), `Kerbwell Account` | the secret |
+| `NEXT_PRIVATE_KERBWELL_ADMIN_ROLE`, `_ROLES_CLAIM`, `_AMR` | unset: `kerbwell-sign-admin`, `roles`, `passkey,webauthn,hwk,swk` | no |
 | `BRAND_SECURITY_CONTACT`, `BRAND_SECURITY_POLICY`, `BRAND_SECURITY_EXPIRES` | the security.txt fields; with a brand set, Contact defaults to `mailto:` the support mailbox and Policy is omitted when unset | no |
 
 `/.well-known/security.txt` and `/site.webmanifest` are served from these values.
-
-## Public surface lock
-
-`sign.kerbwell.com.au` has one account, the platform administrator. Staff work in
-`app.kerbwell.com.au`, which drives this instance through the API; signers arrive on signing links
-or through the client portal embed. With `KERBWELL_PUBLIC_SIGNIN_REDIRECT` set
-(`apps/remix/server/public-surface-lock.ts`), a request on a public host answers 302 to that URL
-(with `Cache-Control: no-store`, any method) unless its path is one of these, which behave as
-before:
-
-| Path | Why it stays open |
-|---|---|
-| `/sign/*`, `/d/*` | signing links and direct template links |
-| `/embed/*` | the client portal embed (signing and authoring) |
-| `/share/*`, `/report/*`, `/articles/*` | shared completed documents, the recipient report link, the signature disclosure linked from the signing page |
-| `/__htmltopdf/*` | the certificate and audit-log render the app calls on itself while sealing |
-| `/api/*` | everything under it, including `/api/auth`, `/api/trpc`, `/api/health` and the Kerbwell gate. The document API keeps its own lock (`NEXT_PRIVATE_INTERNAL_API_HOSTS`, above) |
-| `/assets/*`, `/__manifest`, `/static/*`, `/fonts/*` | the built client, route discovery, the brand files and fonts |
-| `/.well-known/*`, `/site.webmanifest`, `/favicon*`, `/apple-*`, `/android-chrome-*`, `/robots.txt`, `/opengraph-image.jpg` | security.txt, the manifest and the icons |
-
-Everything else redirects: `/`, `/signin`, `/signup`, `/forgot-password`, `/reset-password`,
-`/check-email`, `/verify-email`, `/o/*/signin`, the organisation invite pages, `/inbox`,
-`/dashboard`, `/t/*`, `/o/*`, `/settings/*`, `/admin/*`, public profiles and any unknown path.
-The list is of what stays open, so a route upstream adds later is closed until it is named in
-`PUBLIC_PATH_REGEX`. Matching is case-sensitive (`/SignIn` redirects). The footer's source link
-is an absolute URL on the public mirror and every page that shows the footer (signing,
-completion) is open, so the AGPL-3.0 section 13 link is unaffected.
-
-A request whose Host is one of `NEXT_PRIVATE_INTERNAL_API_HOSTS` and that carries no Cloudflare
-edge header passes untouched, the same rule as the API lock. Kerbwell production does not set
-`NEXT_PRIVATE_INTERNAL_API_HOSTS` (the staff app calls the API on `https://sign.kerbwell.com.au`),
-and the internal FQDN answers only inside the Container Apps environment (the public ingress
-returns 404 for it), so no browser reaches the dashboard that way.
-
-Administrator access. The administrator signs in through a short window with the lock off, as a
-root change through bs-rootq on Kane's go:
-
-    bs-az containerapp update -g kerbwell-prod-rg -n kerbwell-esign --remove-env-vars KERBWELL_PUBLIC_SIGNIN_REDIRECT
-    # sign in at https://sign.kerbwell.com.au/signin, do the admin work, sign out
-    bs-az containerapp update -g kerbwell-prod-rg -n kerbwell-esign --set-env-vars KERBWELL_PUBLIC_SIGNIN_REDIRECT=https://app.kerbwell.com.au
-    curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' https://sign.kerbwell.com.au/signin   # 302 https://app.kerbwell.com.au/
-
-Sign-up stays disabled and the password reset refused during the window
-(`NEXT_PUBLIC_DISABLE_SIGNUP`, `NEXT_PUBLIC_DISABLE_PASSWORD_RESET`). Most administration needs no
-window: organisation settings, branding, the webhook and the API token are set by rerunning the
-bootstrap job, and the administrator password is reset the same way. `bs-az containerapp exec`
-gives a shell in the container, not a browser, and Container Apps has no port forward. No IP
-allowlist or other exception is added for the administrator.
-
-`npx vitest run server/public-surface-lock.test.ts` (in `apps/remix`) covers the redirected and
-open paths, the internal host, the edge header, an invalid value and the lock being off. CI also
-starts a second app from the image with the lock on and runs
-`packages/app-tests/e2e/kerbwell-surface-lock` against it, which creates and sends an envelope
-through the internal API and opens its signing link on the public host in a browser.
-
-## Brand
-
-The Kerbwell brand kit of 4 November 2026 with the Bitumen palette of 5 November 2026: the drawn
-mark (a K cut from a kerb-and-channel section), the Geist 600 wordmark, Geist and Geist Mono,
-and the Kerbwell colour tokens
-(`packages/ui/src/tokens/kerbwell.css` in the product repository). Every file is under
-`apps/remix/public/static/kerbwell-*` and is used only when the variables above name it.
-
-| File | What it is |
-|---|---|
-| `kerbwell-primary-light.svg`, `kerbwell-primary-dark.svg` | horizontal lockup in the 1042 x 206 box `BrandingLogo` reserves: light pages, the yellow mark on its Night tile with a Night wordmark; dark pages, the yellow mark bare with a Paper wordmark |
-| `kerbwell-mark-light.svg`, `kerbwell-mark-dark.svg` | the mark alone, square: on its Night tile (light pages), bare yellow (dark pages) |
-| `kerbwell-logo.png` | 1200 x 361 lockup for email and the recipient-page logo, transparent: the mark on its Night tile, Night wordmark |
-| `kerbwell-brand.css` | `@font-face` for Geist 400/500/600 and Geist Mono 400, the semantic colour tokens as HSL triples for light and dark, the record-node hairline under the sign-in heading, focus and error page styles |
-| `kerbwell-geist-*.woff2`, `kerbwell-geist-OFL.txt` | the fonts (SIL Open Font License 1.1, licence beside them) |
-
-Colour. The values are the product's token file (`packages/ui/src/tokens/kerbwell.css`), Bitumen
-with line-marking yellow, Paper light base and the warm Bitumen dark base. Light: the page is
-the warm surface #FBFAF6 with white cards, Night (#0B0A09) text and muted text #47443E (9.29:1
-on the page, 7.77:1 on the hover fill); links, the focus ring and the field-card edge are
-Bitumen #272622 (12.13:1 on the worst surface); the filled primary button is the yellow #FFC21A
-with a Night label (12.23:1). The yellow is 1.62:1 on white, so it never sits bare on a light
-page: the mark sits on its Night tile (the app icon) and the record nodes take a 1px Night edge.
-Dark: canvas #12110F, Asphalt cards, Paper text, muted #C4C0B6 (7.89:1 on the worst dark
-surface), primary, ring and field-card edge the yellow with a Night label. Input edges are
-Slate #858177, 3:1 or better in both. Every text pair is 7:1 or better;
-`packages/lib/constants/brand-kerbwell.test.ts` checks the HSL triples against their hex values
-and the contrast floors.
-
-A different accent is the `--kw-accent-*` lines and the HSL triples marked "accent" in
-`kerbwell-brand.css`, taken from the same steps of the token file's accent block, the mark fill
-in the four SVGs and the PNG, and `primary`, `primaryForeground`, `ring` and `fieldCardBorder`
-in `KERBWELL_ESIGN_BRANDING_COLORS` below.
-
-Error pages. Under a brand (`BRAND_NAME` set) the root error boundary shows the sign-in frame
-with the lockup, an "Error 404" label, a plain heading ("Page not found") and Home and Go back
-buttons; the page title is `BRAND_PRODUCT_NAME` and the document language is `en`. The estate's
-instance keeps its own error page.
-
-Recipient pages (signing, completion) take the organisation branding the bootstrap job writes.
-Kerbwell's values pin those pages to the light palette on every device, as the estate does:
-
-```
-KERBWELL_ESIGN_BRANDING_COLORS={"background":"#FBFAF6","foreground":"#0B0A09","muted":"#EDEAE0","mutedForeground":"#47443E","popover":"#FFFFFF","popoverForeground":"#0B0A09","card":"#FFFFFF","cardBorder":"#D9D5CA","cardForeground":"#0B0A09","fieldCard":"#FFFFFF","fieldCardBorder":"#272622","fieldCardForeground":"#0B0A09","widget":"#EDEAE0","widgetForeground":"#0B0A09","border":"#D9D5CA","input":"#858177","primary":"#272622","primaryForeground":"#FFC21A","secondary":"#E9E6DC","secondaryForeground":"#0B0A09","accent":"#E9E6DC","accentForeground":"#0B0A09","destructive":"#8B2320","destructiveForeground":"#FFFFFF","ring":"#272622","envelopeEditorBackground":"#EDEAE0"}
-KERBWELL_ESIGN_BRANDING_CSS=color-scheme: light; .dark\:text-gray-400.dark\:text-gray-400 { color: #47443E; } .dark\:bg-gray-400\/10.dark\:bg-gray-400\/10 { background-color: #EDEAE0; } .dark\:text-green-400.dark\:text-green-400 { color: #1B542C; } .dark\:bg-green-500\/10.dark\:bg-green-500\/10 { background-color: #E5F0E7; } .dark\:text-blue-400.dark\:text-blue-400 { color: #1F4A7E; } .dark\:bg-blue-400\/10.dark\:bg-blue-400\/10 { background-color: #E5ECF5; } .dark\:text-red-400.dark\:text-red-400 { color: #8B2320; } .dark\:bg-red-400\/10.dark\:bg-red-400\/10 { background-color: #F8E6E3; } .dark\:text-yellow-500.dark\:text-yellow-500 { color: #6B4002; } .dark\:bg-yellow-400\/10.dark\:bg-yellow-400\/10 { background-color: #F6ECDA; } .dark\:text-orange-400.dark\:text-orange-400 { color: #6B4002; } .dark\:bg-orange-400\/10.dark\:bg-orange-400\/10 { background-color: #F6ECDA; }
-KERBWELL_ESIGN_BRANDING_LOGO_FILE=public/static/kerbwell-logo.png
-```
-
-The CSS holds the light palette on pages that otherwise follow a dark device setting: the
-status badges that use `dark:` colours get the token file's light status inks on their soft
-fills, 7:1 or better.
 
 ## Bootstrap job environment
 
@@ -200,9 +101,160 @@ job against it and runs `packages/app-tests/e2e/kerbwell-platform` (Playwright, 
 `/api/v1`, `/api/v2`, `/api/v2-beta` and the OpenAPI document return 404 on `localhost` even with
 a valid token, `/api/v2/envelope` returns 200 on `127.0.0.1` with the bootstrap token, any
 request carrying a Cloudflare edge header returns 404, and `/api/health` and `/signin` stay
-public (this app runs with `KERBWELL_PUBLIC_SIGNIN_REDIRECT` unset). A skipped test fails the job. To run it locally, start the app the same way and set
+public. A skipped test fails the job. To run it locally, start the app the same way and set
 `KERBWELL_E2E_INTERNAL_URL=http://127.0.0.1:3000`, `KERBWELL_E2E_PUBLIC_URL=http://localhost:3000`
 and `KERBWELL_E2E_API_TOKEN`.
+
+## Kerbwell gate
+
+With `NEXT_PRIVATE_KERBWELL_GATE_ISSUER` set, a signer reaches a document only through Kerbwell
+Identity. A copied `/sign/{token}` link on its own shows "This link is no longer active" and the
+agent to contact, and every recipient call made with the token alone is refused.
+
+1. The portal gate (`/s/{ref}`) hands the signer to Kerbwell Identity's signer flow, which
+   verifies them on a second channel and mints a signer assertion.
+2. Kerbwell Identity sends the browser here with an auto-submitted top-level POST:
+   `POST https://sign.kerbwell.com.au/api/kerbwell/gate`, form field `assertion`.
+3. The fork verifies the assertion against the issuer's JWKS (fetched from the pinned URL and
+   cached), records its `jti` (a second use is refused), opens a 30-minute gate session for that
+   one recipient, sets `__Host-kw_gate` (HttpOnly, Secure, SameSite=Lax, Path=/) and 303s to
+   `/sign/{token}`. The token comes from the recipient row and never travels in Kerbwell's
+   messages. A refused assertion lands on `/link-inactive?reason=retry`.
+4. The signing pages, their data requests, the PDF file routes, the embed and report pages and
+   every recipient tRPC call need that cookie for that recipient (403 or the inactive page
+   otherwise). Direct template links are refused outright under mode `all`.
+5. At Complete, a verification older than 15 minutes gets `KERBWELL_REAUTH_REQUIRED`; the
+   browser goes to `<issuer>/signer?prompt=login&max_age=0&recipient=<id>&envelope=<id>`.
+   Kerbwell Identity verifies the signer again and posts a fresh assertion, which returns them to
+   the same document with their fields kept.
+
+### The signer assertion
+
+An ES256 JWT, at most 5 minutes from `iat` to `exp` (Kerbwell Identity mints 2):
+
+| Claim | Meaning |
+|---|---|
+| `iss` | the issuer, exactly `NEXT_PRIVATE_KERBWELL_GATE_ISSUER` |
+| `aud` | `sign` |
+| `sub` | the Documenso recipient id |
+| `env` | the envelope id (`envelope_...`) or its `document_<n>` secondary id |
+| `jti` | single use, 16 to 128 of `A-Za-z0-9_-` |
+| `iat`, `exp`, `auth_time` | seconds; `auth_time` is when the signer was verified |
+| `acr` | `kw-sign-l1`, `kw-sign-l1-single` (one channel; labelled single-factor, refused for `agency_agreement`) or `kw-sign-l2` |
+| `amr` | the methods used, e.g. `["otp_sms"]`, `["passkey"]`, `["otp_email","idv"]` |
+| `consent_version`, `consent_hash` | the consent wording version and its SHA-256 (hex) |
+| `idv_ref` | the FrankieOne reference at level 2, else null |
+| `legal_name` | the CDD legal name (the typed signature defaults to it) |
+| `doc_kind` | `agency_agreement`, `engagement_letter`, `cdd_acknowledgement` or `general_non_prescribed` |
+| `ip`, `ua`, `cf_city` | what Kerbwell Identity saw at verification |
+| `mode` | `remote` or `in_person` |
+
+### What the audit log records
+
+`KERBWELL_IDENTITY_VERIFIED` on every accepted assertion: acr, amr, the single-factor flag and
+its label, auth time, IDV reference, assertion id, document kind, mode, and the ip, user agent
+and city from verification (the row's own ip and user agent are the browser at the gate), and
+whether it was a re-verification. `KERBWELL_CONSENT_GIVEN` the first time a recipient consents
+on a given consent version and hash.
+
+### The consent wording
+
+`consent_version` must be `au-eta-2026-11-v2` and `consent_hash` the SHA-256 (hex) of
+`kerbwellDisclosureCanonicalText()` as UTF-8, today
+`d9d2a8d9d1de6b4cf0c14af017ec414cfcaa1dec632b2aaf591bdb396270c67e`. Both live in
+`packages/lib/constants/kerbwell-disclosure.ts`, which is also the text of
+`/articles/signature-disclosure`. The gate's consent screen shows the same wording. A change to
+the wording is a new version and a new hash; the unit test fails until the constant, the version
+and the hash agree.
+
+The fork enforces this: an assertion whose `consent_version` or `consent_hash` differs from the
+constant is refused at `/api/kerbwell/gate` (reason `consent`, the signer lands on the retry page)
+before anything is written, so the audit trail never records consent to wording this build does
+not show. Deploy the gate's new wording and the fork's new constant together.
+
+Versions: `au-eta-2026-11-v1` said nothing was filled in for the signer, which the typed signature
+pre-filled from the legal name contradicted; it was never deployed, and the fork now refuses it.
+`au-eta-2026-11-v2` says the typed signature is pre-filled with the legal name the sender holds,
+that drawing is an option, and that the signature is adopted only on Adopt signature.
+
+### Signer UI
+
+Behind a gate session the signing page:
+
+- opens the signature dialog on Type, filled with `legal_name` in the signature font, so it is
+  adopted with one tap ("Adopt signature"); Draw is an equal tab. Upload is never offered when
+  `doc_kind` is `agency_agreement`: the loader turns `uploadSignatureEnabled` off for that
+  recipient whatever the document settings say. The server enforces it too. A drawn and an
+  uploaded signature are both canvas PNGs, so on an agency agreement the server does not store
+  the browser's image: the draw pad sends its pen strokes beside it (`kerbwellDrawn` on
+  `envelope.field.sign` and `field.signFieldWithToken`), and the server renders the stored PNG
+  from them. An image with no strokes is refused (`KERBWELL_UPLOAD_REFUSED`, 400) unless it is a
+  signature the server already rendered for that recipient. Dispatch should still send agency
+  agreements with `uploadSignatureEnabled: false`.
+- never bulk-signs fields (the upstream auto-sign dialog is off), so every signature and initial
+  is its own tap. The final button reads "Sign agreement" beside "By tapping Sign agreement I sign
+  this document and agree to be bound by it."
+- shows "Something wrong?" (the sidebar on a desktop, a button in the bottom bar on a phone). With
+  `NEXT_PRIVATE_KERBWELL_GATE_ACTIONS_URL` set, each action links to
+  `<actions url>?action=<ask|decline|wrong-person|paper>&recipient=<id>&envelope=<id>`; the
+  portal maps that to its gate record and confirms with the signer there. Without it, Ask the
+  agent mails the envelope's reply-to and Decline uses the fork's own decline. Request paper and
+  Wrong person never decline the document (the disclosure says asking for paper pauses signing for
+  that signer): they say nothing is signed and offer a prefilled email to the agent.
+- gives every field on the canvas a focusable button over its box, so Next field moves focus to
+  the field and Enter or Space fills it (no drag, no pointer).
+- ends on a done page that says the executed PDF is emailed when everyone has signed, offers the
+  current copy, and links to `<passkey url>?recipient=<id>&envelope=<id>` unless `mode` was
+  `in_person`.
+
+Phone speed: the build writes brotli and gzip copies of every client asset
+(`apps/remix/.bin/precompress.mjs`) and `server/main.js` serves them (`precompressed: true`), so
+the signing page is about 1.3 MB on the wire instead of 4.9 MB while nothing in front of the app
+compresses. The signing page's largest paint is the first page of the document, so it no longer
+waits for the JavaScript:
+
+- `GET /api/files/token/<token>/envelope/<id>/envelopeItem/<id>/dataId/<id>/<version>/page-1.webp`
+  returns the first page as an 800 px WebP (about 35 to 55 KB), rendered on the server with pdf.js
+  and skia-canvas and kept in memory by a hash of the stored PDF. Access is the same as `item.pdf`
+  beside it, so under the gate it needs the recipient's gate session; `qr_` tokens get none.
+- The viewer shows it in the server-rendered HTML (`PdfViewerPoster`) until pdf.js has drawn the
+  page, and the gate guard adds `Link: <poster>; rel=preload; as=image; fetchpriority=high` to the
+  `/sign/<token>` response, so the browser requests it right after the document. An edge that
+  turns Link headers into 103 Early Hints sends it even sooner.
+- The pdf.js worker is preloaded at low priority, and the viewer chunk starts downloading as soon
+  as the page's modules run.
+
+`packages/app-tests/e2e/kerbwell-signer-ui` checks this on a phone viewport, including an axe
+WCAG 2.2 AA run on the signing page and the signature dialog.
+
+### The agent on the inactive page
+
+Dispatch sets the envelope's `meta.emailReplyTo` to the sending agent and adds the agent as a
+recipient (the counter-signer or a CC). The page names that recipient. Without one it says "the
+agent who sent it to you".
+
+### Headers
+
+`/sign`, `/d` and `/link-inactive` always send `Referrer-Policy: no-referrer` and
+`Cache-Control: no-store`, and `frame-ancestors 'self'` plus `NEXT_PRIVATE_CSP_SIGN_FRAME_ANCESTORS`.
+
+## Admin sign-in
+
+`NEXT_PUBLIC_KERBWELL_ADMIN_OIDC_ONLY=true` leaves one way into the admin UI: OIDC against Kerbwell
+Identity (`NEXT_PRIVATE_OIDC_*`). The callback verifies the id_token against the provider's
+`jwks_uri` (ES256 or RS256, `iss` the discovered issuer, `aud` the client id) and accepts it only
+with the `kerbwell-sign-admin` role in `roles` and a passkey method in `amr`; anything else goes
+back to `/signin?error=KERBWELL_ADMIN_REFUSED` and touches no account. Email and password sign-in,
+sign-up and reset, Google, Microsoft, organisation SSO and the built-in passkey sign-in all
+answer 403, and `/signin` redirects straight to Kerbwell Identity. The client is a confidential
+client with `client_secret_basic` and PKCE S256. The portal-session SSO handoff is removed.
+
+The bootstrap administrator signs in through OIDC once Kerbwell Identity issues it the role (the
+account is linked by its email). Its password stays in the database unused until INFRA-B removes
+`KERBWELL_ESIGN_ADMIN_PASSWORD` from Key Vault after OIDC is proven.
+
+CI runs `packages/app-tests/e2e/kerbwell-gate` against the image with the gate and the admin
+lockdown on, using a stand-in identity service on 127.0.0.1:4455 (`fake-identity.ts`).
 
 ## Webhook signature
 

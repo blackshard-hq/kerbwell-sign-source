@@ -16,6 +16,17 @@ export type EnvelopePdfViewerProps = {
   errorMessage: { title: MessageDescriptor; description: MessageDescriptor } | null;
 } & Omit<PDFViewerProps, 'data'>;
 
+const TOKEN_PDF_URL = /\/api\/files\/token\/[^/]+\/envelope\/.+\/item\.pdf$/;
+
+/**
+ * The first-page image beside a recipient-token PDF URL (server/api/files/routes
+ * get-envelope-item-preview-by-token.ts). Kerbwell fork addition; null for anything else.
+ */
+export const getEnvelopeItemPosterUrl = (data: unknown) =>
+  typeof data === 'string' && TOKEN_PDF_URL.test(data) && !data.includes('/token/qr_')
+    ? data.replace(/item\.pdf$/, 'page-1.webp')
+    : null;
+
 export const EnvelopePdfViewer = ({ errorMessage, className, ...props }: EnvelopePdfViewerProps) => {
   const { t } = useLingui();
 
@@ -50,6 +61,7 @@ export const EnvelopePdfViewer = ({ errorMessage, className, ...props }: Envelop
       {...props}
       className={cn('h-full w-full max-w-[800px]', className)}
       data={currentEnvelopeItem.data}
+      posterUrl={getEnvelopeItemPosterUrl(currentEnvelopeItem.data)}
     />
   );
 };

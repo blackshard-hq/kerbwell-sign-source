@@ -11,10 +11,21 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+# Runner: repository variable RUNNER, a self-hosted pool label while the hosted-minutes budget is spent, a hosted
+# label as overflow; unset = ubuntu-latest. The pool refuses a job without a container, so there the job runs in a
+# pinned node image (the `container:` expression, empty on a hosted runner).
+# The image compile check lives in kerbwell-source.yml (image_tests builds the same `unpublished` target on every
+# pull request and main push), so it is not built a second time here.
 jobs:
   build_app:
     name: Build App
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.RUNNER || '["ubuntu-latest"]') }}
+    container: ${{ contains(vars.RUNNER || '', 'self-hosted') && fromJSON('{"image":"node:22-bookworm@sha256:63538dfe497cc29dfafdda25ada09b46db68a3f4cc205abf1f5d6bf0913f3384","options":"--init --cpus 4 --memory 10g --memory-swap 10g --pids-limit 4096"}') || '' }}
+    timeout-minutes: 45
+    # bash, as on a hosted runner: a job container's default shell is sh
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -27,27 +38,8 @@ jobs:
         run: cp .env.example .env
 
       - name: Build app
+        # The remix typecheck peaks near node's default ~2 GB heap on a 16 GB runner and has
+        # died there on main while the identical tree passed on its PR (ef80e9d3d3).
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: npm run build
-
-  build_docker:
-    name: Build Docker Image
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          fetch-depth: 2
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-
-      - name: Build Docker Image
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
-        with:
-          push: false
-          context: .
-          file: ./docker/Dockerfile
-          # Compile check only: the shipped target needs a published source URL
-          # (kerbwell-source.yml builds that one).
-          target: unpublished
-          tags: documenso-${{ github.sha }}

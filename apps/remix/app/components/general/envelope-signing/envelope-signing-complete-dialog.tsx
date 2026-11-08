@@ -69,6 +69,11 @@ export const EnvelopeSignerCompleteDialog = () => {
 
         if (fieldTooltip) {
           fieldTooltip.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+          // Kerbwell: move focus to the field too, so Enter or Space fills it (no drag needed).
+          document
+            .querySelector<HTMLElement>(`[data-testid="kw-field-target"][data-field-id="${nextField.id}"]`)
+            ?.focus({ preventScroll: true });
         } else {
           // Tooltip not in DOM (page virtualized away) — signal the PDF viewer
           // to scroll to the correct page via the data attribute.

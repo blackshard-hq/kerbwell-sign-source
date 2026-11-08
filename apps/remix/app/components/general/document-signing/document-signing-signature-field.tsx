@@ -10,6 +10,7 @@ import type {
 import { Button } from '@documenso/ui/primitives/button';
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from '@documenso/ui/primitives/dialog';
 import { SignaturePad } from '@documenso/ui/primitives/signature-pad';
+import { drawnStrokesFor } from '@documenso/ui/primitives/signature-pad/drawn-strokes';
 import { useToast } from '@documenso/ui/primitives/use-toast';
 import { msg } from '@lingui/core/macro';
 import { useLingui } from '@lingui/react';
@@ -19,6 +20,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useRevalidator } from 'react-router';
 
 import { DocumentSigningDisclosure } from '~/components/general/document-signing/document-signing-disclosure';
+import { isKerbwellUploadAllowed, useKerbwellGateSigning } from '~/components/general/kerbwell/gate-signing-context';
 
 import { useRequiredDocumentSigningAuthContext } from './document-signing-auth-provider';
 import { DocumentSigningFieldContainer } from './document-signing-field-container';
@@ -44,6 +46,7 @@ export const DocumentSigningSignatureField = ({
   uploadSignatureEnabled,
   drawSignatureEnabled,
 }: DocumentSigningSignatureFieldProps) => {
+  const kerbwellGate = useKerbwellGateSigning();
   const { _ } = useLingui();
   const { toast } = useToast();
   const { revalidate } = useRevalidator();
@@ -139,6 +142,7 @@ export const DocumentSigningSignatureField = ({
         value,
         isBase64: !isTypedSignature,
         authOptions,
+        kerbwellDrawn: isTypedSignature ? undefined : drawnStrokesFor(value),
       };
 
       if (onSignField) {
@@ -277,8 +281,9 @@ export const DocumentSigningSignatureField = ({
             value={localSignature ?? ''}
             onChange={({ value }) => setLocalSignature(value)}
             typedSignatureEnabled={typedSignatureEnabled}
-            uploadSignatureEnabled={uploadSignatureEnabled}
+            uploadSignatureEnabled={isKerbwellUploadAllowed(kerbwellGate, uploadSignatureEnabled)}
             drawSignatureEnabled={drawSignatureEnabled}
+            defaultTab={kerbwellGate?.legalName ? 'text' : undefined}
           />
 
           <DocumentSigningDisclosure />

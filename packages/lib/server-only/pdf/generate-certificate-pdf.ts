@@ -104,6 +104,7 @@ export const generateCertificatePdf = async (options: GenerateCertificatePdfOpti
         .with('PASSWORD', () => i18n._(msg`Password Re-Authentication`))
         .with('PASSKEY', () => i18n._(msg`Passkey Re-Authentication`))
         .with('EXPLICIT_NONE', () => i18n._(msg`Email`))
+        .with('KERBWELL_GATE', () => i18n._(msg`Kerbwell identity check`))
         .with(undefined, () => null)
         .exhaustive();
 
@@ -113,6 +114,7 @@ export const generateCertificatePdf = async (options: GenerateCertificatePdfOpti
         authLevel = match(accessAuthMethod)
           .with('ACCOUNT', () => i18n._(msg`Account Authentication`))
           .with('TWO_FACTOR_AUTH', () => i18n._(msg`Two-Factor Authentication`))
+          .with('KERBWELL_GATE', () => i18n._(msg`Kerbwell identity check`))
           .with(undefined, () => i18n._(msg`Email`))
           .exhaustive();
       }

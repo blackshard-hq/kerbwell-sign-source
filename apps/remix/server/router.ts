@@ -28,9 +28,9 @@ import { aiRoute } from './api/ai/route';
 import { brandRoute } from './api/brand/brand';
 import { downloadRoute } from './api/download/download';
 import { filesRoute } from './api/files/files';
+import { kerbwellGatePageGuard, kerbwellGateRequestStore, kerbwellGateRoute } from './api/kerbwell-gate';
 import { type AppContext, appContext } from './context';
 import { appMiddleware, internalApiHostLock } from './middleware';
-import { publicSurfaceLock } from './public-surface-lock';
 import { securityHeadersMiddleware } from './security-headers';
 import { openApiTrpcServerHandler } from './trpc/hono-trpc-open-api';
 import { reactRouterTrpcServer } from './trpc/hono-trpc-remix';
@@ -75,13 +75,6 @@ app.use(appContext);
 app.use(securityHeadersMiddleware);
 
 /**
- * Kerbwell: no public sign-in or dashboard when KERBWELL_PUBLIC_SIGNIN_REDIRECT is set
- * (public-surface-lock.ts). Runs after the security headers so the redirect carries HSTS, and
- * before any page or session work.
- */
-app.use('*', publicSurfaceLock);
-
-/**
  * RR7 app middleware.
  */
 app.use('*', appMiddleware);
@@ -101,6 +94,12 @@ app.use(async (c, next) => {
   await next();
 });
 
+// Kerbwell gate (api/kerbwell-gate.ts): every request runs with its Cookie header readable to the
+// signing checks, and every recipient-token page, data request and file request needs a gate
+// session for that recipient.
+app.use('*', kerbwellGateRequestStore);
+app.use('*', kerbwellGatePageGuard);
+
 // The instance brand's security.txt and web manifest (api/brand/brand.ts).
 app.route('/', brandRoute);
 
@@ -119,6 +118,9 @@ app.use('/api/v2-beta/*', apiV2RateLimitMiddleware);
 
 // Auth server.
 app.route('/api/auth', auth);
+
+// Kerbwell gate: the signer assertion from Kerbwell Identity lands here.
+app.route('/api/kerbwell', kerbwellGateRoute);
 
 // Files route.
 app.use('/api/files/upload-pdf', fileRateLimitMiddleware);

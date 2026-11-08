@@ -9,10 +9,9 @@ name: 'Kerbwell source and platform'
 # tag that answers 200 anonymously (docker/kerbwell-source-gate.mjs), so no other build route
 # can ship an image without public source.
 #
-# The platform tests run on every pull request: the timestamped webhook signature, host-lock and
-# public-surface-lock unit tests, then the built image itself (the bootstrap on a fresh database,
-# the Playwright host-lock spec against the running app with the lock on, and the surface-lock
-# spec against a second app with KERBWELL_PUBLIC_SIGNIN_REDIRECT set).
+# The platform tests run on every pull request: the timestamped webhook signature and host-lock
+# unit tests, then the built image itself (the bootstrap on a fresh database, and the
+# Playwright host-lock spec against the running app with the lock on).
 
 on:
   pull_request:
@@ -25,9 +24,17 @@ permissions:
   contents: read
 
 concurrency:
+  # A new push to a pull request supersedes the run on the old head, so that run is cancelled. Pushes to main are
+  # never cancelled: each main commit's run publishes its source to the mirror.
   group: kerbwell-source-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Runner: the jobs that need no docker daemon (platform_tests, source_check_negative) read the repository variable
+# RUNNER: a self-hosted pool label while the hosted-minutes budget is spent, a hosted label as overflow; unset =
+# ubuntu-latest. The pool refuses a job without a container, so there each runs in a pinned node image (the
+# `container:` expression, empty on a hosted runner). image_tests, source_gate_build and publish_source drive the
+# runner's own docker daemon (sibling containers on the host network, host-path binds, buildx) and stay on
+# ubuntu-latest.
 env:
   GITLEAKS_VERSION: '8.30.1'
   GITLEAKS_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'
@@ -36,7 +43,13 @@ env:
 jobs:
   platform_tests:
     name: Kerbwell platform tests
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.RUNNER || '["ubuntu-latest"]') }}
+    container: ${{ contains(vars.RUNNER || '', 'self-hosted') && fromJSON('{"image":"node:22-bookworm@sha256:63538dfe497cc29dfafdda25ada09b46db68a3f4cc205abf1f5d6bf0913f3384","options":"--init --cpus 2 --memory 3g --memory-swap 3g --pids-limit 4096"}') || '' }}
+    timeout-minutes: 20
+    # bash, as on a hosted runner: a job container's default shell is sh
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -51,8 +64,16 @@ jobs:
         run: npx vitest run server/middleware.test.ts
         working-directory: apps/remix
 
-      - name: Public surface lock
-        run: npx vitest run server/public-surface-lock.test.ts
+      - name: Kerbwell gate and admin sign-in (unit)
+        run: npx vitest run server-only/kerbwell-gate
+        working-directory: packages/lib
+
+      - name: Kerbwell signing disclosure (unit)
+        run: npx vitest run constants/kerbwell-disclosure
+        working-directory: packages/lib
+
+      - name: Kerbwell gate page guard (unit)
+        run: npx vitest run server/api/kerbwell-gate.test.ts
         working-directory: apps/remix
 
       - name: Source gate logic
@@ -70,6 +91,9 @@ jobs:
   # migrated Postgres, then the app with NEXT_PRIVATE_INTERNAL_API_HOSTS=127.0.0.1, set up by
   # the bootstrap job as on ACA, and the Playwright host-lock spec run against it twice over
   # (127.0.0.1 is the internal host, localhost is a public name for the same server).
+  # The same app runs with the Kerbwell gate and the admin OIDC lockdown on, both pointed at
+  # 127.0.0.1:4455, where the gate specs serve a stand-in Kerbwell Identity (JWKS, the
+  # auto-submitted assertion POST, the prompt=login re-entry and a minimal OIDC provider).
   image_tests:
     name: Bootstrap and host lock against the image
     runs-on: ubuntu-latest
@@ -106,12 +130,19 @@ jobs:
           export NEXT_PUBLIC_WEBAPP_URL='http://localhost:3000'
           export NEXT_PUBLIC_UPLOAD_TRANSPORT='database'
           export NEXT_PRIVATE_INTERNAL_API_HOSTS='127.0.0.1'
+          export NEXT_PRIVATE_KERBWELL_GATE_ISSUER='http://127.0.0.1:4455'
+          export NEXT_PUBLIC_KERBWELL_ADMIN_OIDC_ONLY='true'
+          export NEXT_PRIVATE_OIDC_WELL_KNOWN='http://127.0.0.1:4455/.well-known/openid-configuration'
+          export NEXT_PRIVATE_OIDC_CLIENT_ID='kerbwell-sign-e2e'
+          export NEXT_PRIVATE_OIDC_CLIENT_SECRET="$(rnd)"
           docker run -d --name kw-db -p 127.0.0.1:5432:5432 -e POSTGRES_PASSWORD postgres:16-alpine >/dev/null
           for _ in $(seq 1 60); do docker exec kw-db pg_isready -U postgres -q 2>/dev/null && break; sleep 1; done
           docker run -d --name kw-app --network host \
             -e NEXT_PRIVATE_DATABASE_URL -e NEXT_PRIVATE_DIRECT_DATABASE_URL -e NEXTAUTH_SECRET \
             -e NEXT_PRIVATE_ENCRYPTION_KEY -e NEXT_PRIVATE_ENCRYPTION_SECONDARY_KEY \
             -e NEXT_PUBLIC_WEBAPP_URL -e NEXT_PUBLIC_UPLOAD_TRANSPORT -e NEXT_PRIVATE_INTERNAL_API_HOSTS \
+            -e NEXT_PRIVATE_KERBWELL_GATE_ISSUER -e NEXT_PUBLIC_KERBWELL_ADMIN_OIDC_ONLY \
+            -e NEXT_PRIVATE_OIDC_WELL_KNOWN -e NEXT_PRIVATE_OIDC_CLIENT_ID -e NEXT_PRIVATE_OIDC_CLIENT_SECRET \
             kerbwell-esign:ci >/dev/null
           for i in $(seq 1 120); do
             [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/health)" = 200 ] && break
@@ -132,21 +163,10 @@ jobs:
             -e KERBWELL_ESIGN_WEBHOOK_URL -e KERBWELL_ESIGN_WEBHOOK_SECRET \
             --entrypoint node kerbwell-esign:ci kerbwell-bootstrap.mjs
           echo "KERBWELL_E2E_API_TOKEN=${token}" >> "$GITHUB_ENV"
-          # A second app on port 3001 from the same image and database with the public surface
-          # lock on (KERBWELL_PUBLIC_SIGNIN_REDIRECT): the lock spec runs against it.
-          NEXT_PUBLIC_WEBAPP_URL='http://localhost:3001' PORT=3001 \
-          KERBWELL_PUBLIC_SIGNIN_REDIRECT='https://app.kerbwell.example' \
-          docker run -d --name kw-app-lock --network host \
-            -e NEXT_PRIVATE_DATABASE_URL -e NEXT_PRIVATE_DIRECT_DATABASE_URL -e NEXTAUTH_SECRET \
-            -e NEXT_PRIVATE_ENCRYPTION_KEY -e NEXT_PRIVATE_ENCRYPTION_SECONDARY_KEY \
-            -e NEXT_PUBLIC_WEBAPP_URL -e NEXT_PUBLIC_UPLOAD_TRANSPORT -e NEXT_PRIVATE_INTERNAL_API_HOSTS \
-            -e PORT -e KERBWELL_PUBLIC_SIGNIN_REDIRECT \
-            kerbwell-esign:ci >/dev/null
-          for i in $(seq 1 120); do
-            [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3001/api/health)" = 200 ] && break
-            [ "$i" = 120 ] && { docker logs kw-app-lock | tail -60; echo "::error::the locked app did not answer /api/health"; exit 1; }
-            sleep 2
-          done
+          # The gate specs seed documents into the app's database.
+          echo "::add-mask::${POSTGRES_PASSWORD}"
+          echo "NEXT_PRIVATE_DATABASE_URL=${NEXT_PRIVATE_DATABASE_URL}" >> "$GITHUB_ENV"
+          echo "NEXT_PRIVATE_DIRECT_DATABASE_URL=${NEXT_PRIVATE_DIRECT_DATABASE_URL}" >> "$GITHUB_ENV"
           # The running container keeps its image; the build cache is not needed again.
           docker buildx prune -af >/dev/null
           df -h / | tail -1
@@ -165,28 +185,38 @@ jobs:
           grep -qE '[0-9]+ passed' pw.log
           if grep -qE '[0-9]+ (skipped|failed)' pw.log; then echo "::error::a host-lock test was skipped or failed"; exit 1; fi
 
-      - name: Playwright public surface lock spec
+      - name: Playwright browser
+        working-directory: packages/app-tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright gate, admin sign-in and signer UI specs
         working-directory: packages/app-tests
         env:
-          KERBWELL_E2E_SIGNIN_REDIRECT: 'https://app.kerbwell.example'
-          KERBWELL_E2E_INTERNAL_URL: 'http://127.0.0.1:3001'
-          KERBWELL_E2E_PUBLIC_URL: 'http://localhost:3001'
-          NEXT_PUBLIC_WEBAPP_URL: 'http://localhost:3001'
+          KERBWELL_E2E_GATE_ISSUER: 'http://127.0.0.1:4455'
+          KERBWELL_E2E_ADMIN_OIDC: '1'
+          KERBWELL_E2E_OIDC_CLIENT_ID: 'kerbwell-sign-e2e'
+          NEXT_PUBLIC_WEBAPP_URL: 'http://localhost:3000'
         run: |
-          NODE_OPTIONS='--import tsx' npx playwright test e2e/kerbwell-surface-lock \
-            --project ui --retries 0 --reporter list | tee pw-lock.log
-          grep -qE '[0-9]+ passed' pw-lock.log
-          if grep -qE '[0-9]+ (skipped|failed)' pw-lock.log; then echo "::error::a surface-lock test was skipped or failed"; exit 1; fi
+          # One run: the stand-in identity signs with one key per process, and the app refetches
+          # an unknown key at most every 30 seconds.
+          NODE_OPTIONS='--import tsx' npx playwright test e2e/kerbwell-gate e2e/kerbwell-signer-ui \
+            --project ui --workers 1 --retries 0 --reporter list | tee pw-gate.log
+          grep -qE '[0-9]+ passed' pw-gate.log
+          if grep -qE '[0-9]+ (skipped|failed|flaky)' pw-gate.log; then echo "::error::a gate or signer UI test was skipped or failed"; exit 1; fi
 
       - name: App log on failure
         if: failure()
-        run: |
-          docker logs kw-app 2>&1 | tail -80 || true
-          docker logs kw-app-lock 2>&1 | tail -80 || true
+        run: docker logs kw-app 2>&1 | tail -80 || true
 
   source_check_negative:
     name: Source check refuses a private commit
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.RUNNER || '["ubuntu-latest"]') }}
+    container: ${{ contains(vars.RUNNER || '', 'self-hosted') && fromJSON('{"image":"node:22-bookworm@sha256:63538dfe497cc29dfafdda25ada09b46db68a3f4cc205abf1f5d6bf0913f3384","options":"--init --cpus 1 --memory 1g --memory-swap 1g --pids-limit 512"}') || '' }}
+    timeout-minutes: 10
+    # bash, as on a hosted runner: a job container's default shell is sh
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

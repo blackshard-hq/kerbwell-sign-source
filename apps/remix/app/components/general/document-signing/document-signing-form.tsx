@@ -18,7 +18,7 @@ import { type Field, type Recipient, RecipientRole } from '@prisma/client';
 import { useId, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router';
-
+import { isKerbwellUploadAllowed, useKerbwellGateSigning } from '~/components/general/kerbwell/gate-signing-context';
 import { AssistantConfirmationDialog, type NextSigner } from '../../dialogs/assistant-confirmation-dialog';
 import { DocumentSigningCompleteDialog } from './document-signing-complete-dialog';
 import { useRequiredDocumentSigningContext } from './document-signing-provider';
@@ -51,6 +51,7 @@ export const DocumentSigningForm = ({
   fieldsValidated,
   nextRecipient,
 }: DocumentSigningFormProps) => {
+  const kerbwellGate = useKerbwellGateSigning();
   const { _ } = useLingui();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -252,8 +253,12 @@ export const DocumentSigningForm = ({
                         value={signature ?? ''}
                         onChange={(v) => setSignature(v ?? '')}
                         typedSignatureEnabled={document.documentMeta?.typedSignatureEnabled}
-                        uploadSignatureEnabled={document.documentMeta?.uploadSignatureEnabled}
+                        uploadSignatureEnabled={isKerbwellUploadAllowed(
+                          kerbwellGate,
+                          document.documentMeta?.uploadSignatureEnabled,
+                        )}
                         drawSignatureEnabled={document.documentMeta?.drawSignatureEnabled}
+                        defaultTab={kerbwellGate?.legalName ? 'text' : undefined}
                       />
                     </div>
                   )}

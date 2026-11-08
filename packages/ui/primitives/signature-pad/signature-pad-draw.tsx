@@ -9,6 +9,7 @@ import type { MouseEvent, PointerEvent, RefObject, TouchEvent } from 'react';
 import { useMemo, useRef, useState } from 'react';
 
 import { cn } from '../../lib/utils';
+import { rememberDrawnStrokes, toDrawnStrokes } from './drawn-strokes';
 import { getSvgPathFromStroke } from './helper';
 import { Point } from './point';
 import { SignaturePadColorPicker } from './signature-pad-color-picker';
@@ -73,6 +74,27 @@ export const SignaturePadDraw = ({ className, value, onChange, ...props }: Signa
       },
     } satisfies StrokeOptions;
   }, []);
+
+  /**
+   * Kerbwell: emits the canvas image and remembers the strokes behind it, for the server-side
+   * render on agency agreements. Only when the strokes are the whole image: over a preloaded image
+   * they are not, so nothing is remembered.
+   */
+  const emitImage = (newLines: Point[][]) => {
+    if (!$el.current) {
+      return;
+    }
+
+    const image = $el.current.toDataURL();
+
+    const drawn = $imageData.current ? null : toDrawnStrokes($el.current, selectedColor, newLines);
+
+    if (drawn && drawn.lines.length > 0) {
+      rememberDrawnStrokes(image, drawn);
+    }
+
+    onChange?.(image);
+  };
 
   const onMouseDown = (event: MouseEvent | PointerEvent | TouchEvent) => {
     if (event.cancelable) {
@@ -161,7 +183,7 @@ export const SignaturePadDraw = ({ className, value, onChange, ...props }: Signa
         setIsSignatureValid(isValidSignature);
 
         if (isValidSignature) {
-          onChange?.($el.current.toDataURL());
+          emitImage(newLines);
         }
         ctx.save();
       }
@@ -231,7 +253,7 @@ export const SignaturePadDraw = ({ className, value, onChange, ...props }: Signa
       ctx?.fill(pathData);
     });
 
-    onChange?.($el.current.toDataURL());
+    emitImage(newLines);
   };
 
   unsafe_useEffectOnce(() => {
@@ -268,6 +290,8 @@ export const SignaturePadDraw = ({ className, value, onChange, ...props }: Signa
           'dark:hue-rotate-180 dark:invert': selectedColor === 'black',
         })}
         style={{ touchAction: 'none' }}
+        role="img"
+        aria-label="Draw your signature here"
         onPointerMove={(event) => onMouseMove(event)}
         onPointerDown={(event) => onMouseDown(event)}
         onPointerUp={(event) => onMouseUp(event)}
@@ -281,7 +305,7 @@ export const SignaturePadDraw = ({ className, value, onChange, ...props }: Signa
       <div className="absolute right-3 bottom-3 flex gap-2">
         <button
           type="button"
-          className="rounded-full p-0 text-[0.688rem] text-muted-foreground/60 ring-offset-background hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full px-2 text-muted-foreground text-xs ring-offset-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => onClearClick()}
         >
           <Trans>Clear Signature</Trans>
@@ -301,7 +325,7 @@ export const SignaturePadDraw = ({ className, value, onChange, ...props }: Signa
           <button
             type="button"
             title="undo"
-            className="rounded-full p-0 text-[0.688rem] text-muted-foreground/60 ring-offset-background hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full px-2 text-muted-foreground text-xs ring-offset-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={onUndoClick}
           >
             <Undo2 className="h-4 w-4" />

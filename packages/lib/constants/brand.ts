@@ -108,20 +108,6 @@ export const brandFileSlug = () => {
   return slug === '' ? BRAND_DEFAULTS.fileSlug : slug;
 };
 
-/**
- * A brand stylesheet the root layout links after the app's own (type, colour tokens), e.g.
- * /static/kerbwell-brand.css. Only a same-origin path to a .css file is accepted, so the strict
- * style-src-elem 'self' policy still covers it; anything else is ignored. Unset links nothing,
- * which is how the estate's own instance runs.
- */
-export const brandStylesheetPath = (): string | undefined => {
-  const value = read('BRAND_STYLESHEET_PATH');
-
-  return value !== undefined && /^\/(?!\/)[A-Za-z0-9/_.-]+\.css$/.test(value) && !value.includes('..')
-    ? value
-    : undefined;
-};
-
 /** The site footer line. Unset keeps the estate's two-line entity footer. */
 export const brandFooterText = () => read('BRAND_FOOTER_TEXT');
 

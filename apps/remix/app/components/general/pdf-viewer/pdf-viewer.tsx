@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ScrollTarget } from '../virtual-list/use-virtual-list';
 import { useVirtualList } from '../virtual-list/use-virtual-list';
 import { PdfViewerPageImage } from './pdf-viewer-page-image';
-import { PdfViewerErrorState, PdfViewerLoadingState } from './pdf-viewer-states';
+import { PdfViewerErrorState, PdfViewerLoadingState, PdfViewerPoster } from './pdf-viewer-states';
 import { useScrollToPage } from './use-scroll-to-page';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
@@ -51,6 +51,9 @@ export type PDFViewerProps = {
 
   onDocumentLoad?: () => void;
 
+  /** Kerbwell: the server's first-page image to show while the document loads. */
+  posterUrl?: string | null;
+
   /**
    * Additional component to render next to the image, such as a Konva canvas
    * for rendering fields.
@@ -64,6 +67,7 @@ export default function PDFViewer({
   scrollParentRef,
   onDocumentLoad,
   customPageRenderer,
+  posterUrl,
   ...props
 }: PDFViewerProps) {
   const { t } = useLingui();
@@ -193,7 +197,7 @@ export default function PDFViewer({
   return (
     <div ref={$el} className={cn('h-full w-full', className)} {...props}>
       {/* Loading State */}
-      {isLoading && <PdfViewerLoadingState />}
+      {isLoading && (posterUrl ? <PdfViewerPoster src={posterUrl} /> : <PdfViewerLoadingState />)}
 
       {/* Error State */}
       {hasError && <PdfViewerErrorState />}
@@ -299,7 +303,7 @@ const VirtualizedPageList = ({
               customPageRenderer={customPageRenderer}
             />
 
-            <p className="my-2 text-center text-[11px] text-muted-foreground/80">
+            <p className="my-2 text-center text-[11px] text-muted-foreground">
               <Trans>
                 Page {pageNumber} of {numPages}
               </Trans>

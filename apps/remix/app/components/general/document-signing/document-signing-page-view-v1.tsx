@@ -43,6 +43,7 @@ import { DocumentSigningRadioField } from '~/components/general/document-signing
 import { DocumentSigningRejectDialog } from '~/components/general/document-signing/document-signing-reject-dialog';
 import { DocumentSigningSignatureField } from '~/components/general/document-signing/document-signing-signature-field';
 import { DocumentSigningTextField } from '~/components/general/document-signing/document-signing-text-field';
+import { useKerbwellGateSigning } from '~/components/general/kerbwell/gate-signing-context';
 import PDFViewerLazy from '~/components/general/pdf-viewer/pdf-viewer-lazy';
 
 import { useRequiredDocumentSigningAuthContext } from './document-signing-auth-provider';
@@ -76,6 +77,8 @@ export const DocumentSigningPageViewV1 = ({
   branding,
 }: DocumentSigningPageViewV1Props) => {
   const { documentData, documentMeta } = document;
+
+  const kerbwellGate = useKerbwellGateSigning();
 
   const { derivedRecipientAccessAuth, user: authUser } = useRequiredDocumentSigningAuthContext();
 
@@ -177,7 +180,7 @@ export const DocumentSigningPageViewV1 = ({
 
   return (
     <DocumentSigningRecipientProvider recipient={recipient} targetSigner={targetSigner}>
-      <div className="mx-auto w-full max-w-screen-xl sm:px-6">
+      <div className="kw-signing mx-auto w-full max-w-screen-xl sm:px-6">
         {hasCustomBrandingLogo && (
           <img
             src={`/api/branding/logo/team/${document.teamId}`}
@@ -392,7 +395,8 @@ export const DocumentSigningPageViewV1 = ({
           showRecipientTooltip={true}
         />
 
-        {recipient.role !== RecipientRole.ASSISTANT && (
+        {/* Kerbwell: every field is its own tap, so nothing is signed in bulk behind a gate session. */}
+        {recipient.role !== RecipientRole.ASSISTANT && !kerbwellGate && (
           <DocumentSigningAutoSign recipient={recipient} fields={fields} />
         )}
 

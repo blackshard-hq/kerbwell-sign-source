@@ -564,6 +564,47 @@ export const EnvelopeSignerPageRenderer = ({ pageData }: { pageData: PageRenderD
     pageLayer.current.batchDraw();
   }, [selectedAssistantRecipient]);
 
+  /**
+   * Kerbwell (WCAG 2.1.1, 2.5.7): the fields are drawn on a canvas, so each one also gets a
+   * focusable button over its box. Enter or Space on it does what a tap on the field does. The
+   * button takes no pointer events, so taps still land on the canvas as before.
+   */
+  const activateFieldFromKeyboard = (fieldId: number) => {
+    const group = pageLayer.current?.findOne<Konva.Group>(`#${fieldId}`);
+
+    if (!group) {
+      return;
+    }
+
+    const option = group.findOne(
+      (node: Konva.Node) =>
+        node.getAttr('internalCheckboxIndex') !== undefined || node.getAttr('internalRadioIndex') !== undefined,
+    );
+
+    const target = option ?? group.findOne('.field-rect') ?? group;
+
+    target.fire('pointerdown', { type: 'pointerdown' }, true);
+  };
+
+  const fieldTargetLabel = (field: (typeof localPageFields)[number]) => {
+    const kind = match(field.type)
+      .with(FieldType.SIGNATURE, FieldType.FREE_SIGNATURE, () => t`Signature`)
+      .with(FieldType.INITIALS, () => t`Initials`)
+      .with(FieldType.NAME, () => t`Name`)
+      .with(FieldType.EMAIL, () => t`Email`)
+      .with(FieldType.DATE, () => t`Date`)
+      .with(FieldType.TEXT, () => t`Text`)
+      .with(FieldType.NUMBER, () => t`Number`)
+      .with(FieldType.CHECKBOX, () => t`Checkbox`)
+      .with(FieldType.RADIO, () => t`Choice`)
+      .with(FieldType.DROPDOWN, () => t`Dropdown`)
+      .otherwise(() => t`Field`);
+
+    const state = field.inserted ? t`done` : field.fieldMeta?.required ? t`required` : t`to do`;
+
+    return t`${kind} field, page ${pageNumber}, ${state}`;
+  };
+
   if (!currentEnvelopeItem) {
     return null;
   }
@@ -594,6 +635,27 @@ export const EnvelopeSignerPageRenderer = ({ pageData }: { pageData: PageRenderD
 
       {/* The element Konva will inject it's canvas into. */}
       <div className="konva-container absolute inset-0 z-10 w-full" ref={konvaContainer}></div>
+
+      {localPageFields
+        .filter((field) => !field.fieldMeta?.readOnly)
+        .map((field) => (
+          <button
+            key={`kw-field-target-${field.id}`}
+            type="button"
+            data-testid="kw-field-target"
+            data-field-id={field.id}
+            data-field-type={field.type}
+            aria-label={fieldTargetLabel(field)}
+            className="kw-field-target pointer-events-none absolute z-20 rounded-sm bg-transparent"
+            style={{
+              left: `${Number(field.positionX)}%`,
+              top: `${Number(field.positionY)}%`,
+              width: `${Number(field.width)}%`,
+              height: `${Number(field.height)}%`,
+            }}
+            onClick={() => activateFieldFromKeyboard(field.id)}
+          />
+        ))}
     </>
   );
 };

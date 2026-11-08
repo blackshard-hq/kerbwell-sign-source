@@ -12,12 +12,14 @@ import { extractDocumentAuthMethods } from '../../utils/document-auth';
 import { validateTwoFactorTokenFromEmail } from '../2fa/email/validate-2fa-token-from-email';
 import { verifyTwoFactorAuthenticationToken } from '../2fa/verify-2fa-token';
 import { verifyPassword } from '../2fa/verify-password';
+import { hasKerbwellGateSessionForRecipient } from '../kerbwell-gate/enforce';
+import { getKerbwellGateRequestCookieHeader } from '../kerbwell-gate/request-store';
 
 type IsRecipientAuthorizedOptions = {
   // !: Probably find a better name than 'ACCESS_2FA' if requirements change.
   type: 'ACCESS' | 'ACCESS_2FA' | 'ACTION';
   documentAuthOptions: Envelope['authOptions'];
-  recipient: Pick<Recipient, 'authOptions' | 'email' | 'envelopeId'>;
+  recipient: Pick<Recipient, 'id' | 'authOptions' | 'email' | 'envelopeId'>;
 
   /**
    * The ID of the user who initiated the request.
@@ -82,6 +84,14 @@ export const isRecipientAuthorized = async ({
   if (!authOptions && authMethods.some((method) => method === DocumentAuth.ACCOUNT)) {
     authOptions = {
       type: DocumentAuth.ACCOUNT,
+    };
+  }
+
+  // Kerbwell gate: the proof is the gate cookie on this request, not anything the client sends, so
+  // the method is implied whenever it is required.
+  if (authMethods.includes(DocumentAuth.KERBWELL_GATE) && (!authOptions || !authMethods.includes(authOptions.type))) {
+    authOptions = {
+      type: DocumentAuth.KERBWELL_GATE,
     };
   }
 
@@ -165,6 +175,9 @@ export const isRecipientAuthorized = async ({
     })
     .with({ type: DocumentAuth.EXPLICIT_NONE }, () => {
       return true;
+    })
+    .with({ type: DocumentAuth.KERBWELL_GATE }, async () => {
+      return await hasKerbwellGateSessionForRecipient(getKerbwellGateRequestCookieHeader(), recipient.id);
     })
     .exhaustive();
 };
